@@ -1,7 +1,3 @@
-/// a CUDA implementation of the hybrid symplectic n-body integrator as described by Chambers in 1999
-/// one thread ==> n bodies in the system, for now n = 1, but in order to compute ~40,000 bodies we need each thread to integrate 40 bodies
-/// each block explores one set of orbital elements for P9, since blocks cannot communicate this is optimal
-
 #include <stdio.h>
 #include <cuda_runtime.h>
 #include <math.h>
@@ -50,7 +46,7 @@ void cartesian_from_elements(
     double* vec_eccentricity,
     double* vec_semi_major_axis,
     double3* current_positions,
-    double3* current_velocities,
+    double3* current_velocities
 ) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     double inclination = vec_inclination[idx];
@@ -84,7 +80,7 @@ void cartesian_from_elements(
     double cos_e = cos(eccentric_anomaly);
     z1 = semi_major_axis * (cos_e - eccentricity);
     z2 = semi_major_axis * romes * sin_e;
-    eccentric_anomaly = sqrt(G/semi_major_axis) / (1.0 - e*cos_e);
+    eccentric_anomaly = sqrt(G/semi_major_axis) / (1.0 - eccentricity*cos_e);
     z3 = -sin_e * eccentric_anomaly;
     z4 = romes * cos_e * eccentric_anomaly;
     
@@ -118,16 +114,16 @@ void elements_from_cartesian(
     double* vec_argument_of_perihelion, 
     double* vec_mean_anomaly,
     double* vec_eccentricity,
-    double* vec_semi_major_axis,
+    double* vec_semi_major_axis
 ) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     double3 current_p = current_positions[idx];
     double3 current_v = current_velocities[idx];
     double3 angular_momentum = cross(current_p, current_v);
-    double h_sq = magnitude_squared(angular_momentum);
+    double h_sq = magnitude_squared(angular_momentum).x + magnitude_squared(angular_momentum).y + magnitude_squared(angular_momentum).z;
     double inclination = acos(angular_momentum.z / sqrt(h_sq));
     double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y);
-    double v_sq = magnitude_squared(current_v);
+    double v_sq = magnitude_squared(current_v).x + magnitude_squared(current_v).y + magnitude_squared(current_v).z;
     double r = magnitude(current_p);
     double s = h_sq / G;
     double eccentricity = sqrt(1 + s * ((v_sq / G) - (2.00 / r)));
@@ -140,12 +136,12 @@ void elements_from_cartesian(
 
     // weird calc for true longitude
     double to = -angular_momentum.x / angular_momentum.y;
-    double temp = (1.00 - cos_i) * to;
+    double temp = (1.00 - cos(inclination)) * to;
     double temp2 = to * to;
-    double true_longitude = atan2((current_p.y * (1.00 + temp2 * cos_i) - current_p.x * temp), (current_p.x * (temp2 + cos_i) - current_p.y * temp));
+    double true_longitude = atan2((current_p.y * (1.00 + temp2 * cos(inclination)) - current_p.x * temp), (current_p.x * (temp2 + cos(inclination)) - current_p.y * temp));
 
     double p = true_longitude - f;
-    p = (p + TWOPI + TWOPI) % TWOPI;
+    p = fmod(p + TWOPI + TWOPI, TWOPI);
     double argument_of_perihelion = p - longitude_of_ascending_node;
     double semi_major_axis = perihelion_distance / (1.00 - eccentricity);
 
@@ -157,15 +153,10 @@ void elements_from_cartesian(
     vec_semi_major_axis[idx] = semi_major_axis;
 }
 
-/*
-Chambers:
-The coordinates remain fixed. Each body receives an acceleration owing to the other bodies (but not the Sun), weighted by a
-factor K(r) lasting for dt/2
-*/
 __device__
 void body_interaction_kick(double3* positions, double3* velocities, double* masses, double dt) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    double acc = make_double3(0.0, 0.0, 0.0);
+    double3 acc = make_double3(0.0, 0.0, 0.0);
     for(int i = 0; i < blockDim.x; i++) {
         // so here we convert abs position to democratic heliocentric coordinates
         // 3-vec displacement, let r = x, y, z, this is the direction of the acceleration
@@ -188,11 +179,6 @@ void body_interaction_kick(double3* positions, double3* velocities, double* mass
     velocities[idx].z += acc.z * dt;     
 }
 
-
-/*
-Chambers:
-The momenta remain fixed, and each body shifts position by amount dt * sum(momenta)
-*/
 __device__
 void main_body_kinetic(double3* positions, double3* velocities, double* masses, double main_body_mass, double dt) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -209,17 +195,64 @@ void main_body_kinetic(double3* positions, double3* velocities, double* masses, 
     positions[idx].z += p.z * scaling_factor;
 }
 
-// symplectic keplerian integrator
-// so we need to pass in initial conditions
-// so, orbital elements, initial positions, velocities, masses
 __global__ 
-void mercurius_keplerian_solver(double3* positions, double3* velocities, double* masses, double dt) {
+void mercurius_keplerian_solver(
+    double* vec_argument_of_perihelion,
+    double* vec_mean_anomaly,
+    double* vec_eccentricity,
+    double* vec_semi_major_axis,
+    double* vec_inclination,
+    double* vec_longitude_of_ascending_node,
+    double* masses,
+    double dt,
+    int NUM_BODIES
+) {
+    // declare buffers for positions in SRAM
+    extern __shared__ double3 shared_memory[];
+    double3* positions = shared_memory;
+    double3* velocities = (double3*)&positions[NUM_BODIES];
+
+    // initialize the buffer for each thread
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    // populate positions and velocities
+    cartesian_from_elements(
+        vec_inclination,
+        vec_longitude_of_ascending_node,
+        vec_argument_of_perihelion,
+        vec_mean_anomaly,
+        vec_eccentricity,
+        vec_semi_major_axis,
+        positions,
+        velocities
+    );
+
     for(int i = 0; i < NUM_TIMESTEPS_KEPLER; i++) {
         body_interaction_kick(positions, velocities, masses, dt/2.00);
-        main_body_kinetic(positions, velocities, masses, dt/2.00);
-        // this is core, solving Kepler's equation
-        danby_burkardt(angular_rate, anomalies, eccentricities, eccentric_anomalies, dt);
-        main_body_kinetic(positions, velocities, masses, dt/2.00);
+        main_body_kinetic(positions, velocities, masses, masses[0], dt/2.00);
+       
+        elements_from_cartesian(
+            positions,
+            velocities,
+            vec_inclination,
+            vec_longitude_of_ascending_node,
+            vec_argument_of_perihelion,
+            vec_mean_anomaly,
+            vec_eccentricity,
+            vec_semi_major_axis
+        );
+
+        cartesian_from_elements(
+            vec_inclination,
+            vec_longitude_of_ascending_node,
+            vec_argument_of_perihelion,
+            vec_mean_anomaly,
+            vec_eccentricity,
+            vec_semi_major_axis,
+            positions,
+            velocities
+        );
+        
+        main_body_kinetic(positions, velocities, masses, masses[0], dt/2.00);
         body_interaction_kick(positions, velocities, masses, dt/2.00);
     }
 }
