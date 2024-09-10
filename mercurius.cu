@@ -1,3 +1,7 @@
+/// a CUDA implementation of the hybrid symplectic n-body integrator as described by Chambers in 1999
+/// one thread ==> n bodies in the system, for now n = 1, but in order to compute ~40,000 bodies we need each thread to integrate 40 bodies
+/// each block explores one set of orbital elements for P9, since blocks cannot communicate this is optimal
+
 #include <stdio.h>
 #include <cuda_runtime.h>
 #include <math.h>
@@ -123,7 +127,6 @@ void elements_from_cartesian(
     double h_sq = magnitude_squared(angular_momentum);
     double inclination = acos(angular_momentum.z / sqrt(h_sq));
     double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y);
-    // 1.d0  +  s * (v2 / gm  -  2.d0 / r)
     double v_sq = magnitude_squared(current_v);
     double r = magnitude(current_p);
     double s = h_sq / G;
@@ -134,6 +137,13 @@ void elements_from_cartesian(
     double M_anomaly = E_anomaly - eccentricity * sin(E_anomaly); 
     double cos_f = (s - r ) / (eccentricity * r);
     double f = acos(cos_f);
+
+    // weird calc for true longitude
+    double to = -angular_momentum.x / angular_momentum.y;
+    double temp = (1.00 - cos_i) * to;
+    double temp2 = to * to;
+    double true_longitude = atan2((current_p.y * (1.00 + temp2 * cos_i) - current_p.x * temp), (current_p.x * (temp2 + cos_i) - current_p.y * temp));
+
     double p = true_longitude - f;
     p = (p + TWOPI + TWOPI) % TWOPI;
     double argument_of_perihelion = p - longitude_of_ascending_node;
@@ -181,9 +191,7 @@ void body_interaction_kick(double3* positions, double3* velocities, double* mass
 
 /*
 Chambers:
-The momenta remain fixed, and each body shifts position by
-amount dt * sum(momenta)
-me: this takes n the kinetic energy of the main body into account (apparently, i don't understand why 100%)
+The momenta remain fixed, and each body shifts position by amount dt * sum(momenta)
 */
 __device__
 void main_body_kinetic(double3* positions, double3* velocities, double* masses, double main_body_mass, double dt) {
@@ -210,7 +218,6 @@ void mercurius_keplerian_solver(double3* positions, double3* velocities, double*
         body_interaction_kick(positions, velocities, masses, dt/2.00);
         main_body_kinetic(positions, velocities, masses, dt/2.00);
         // this is core, solving Kepler's equation
-        // i still have to figure out how to pass in the eccentricities
         danby_burkardt(angular_rate, anomalies, eccentricities, eccentric_anomalies, dt);
         main_body_kinetic(positions, velocities, masses, dt/2.00);
         body_interaction_kick(positions, velocities, masses, dt/2.00);
