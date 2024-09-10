@@ -6,6 +6,7 @@ __device__ double CUTOFF = 1e-13;
 __device__ int MAX_ITERATIONS_ROOT_FINDING = 20;
 __device__ int NUM_TIMESTEPS_KEPLER = 100000;
 __device__ double G = 6.6743e-11;
+__device__ double TWOPI = 6.283185307179586476925286766559005768394338798750211641949;
 
 // solves kepler's equation for the eccentric anomaly E
 __device__
@@ -37,7 +38,7 @@ double changeover(double r_ij) {
 }
 
 __device__
-double cartesian_from_elements(
+void cartesian_from_elements(
     double* vec_inclination, 
     double* vec_longitude_of_ascending_node, 
     double* vec_argument_of_perihelion, 
@@ -83,13 +84,12 @@ double cartesian_from_elements(
     z3 = -sin_e * eccentric_anomaly;
     z4 = romes * cos_e * eccentric_anomaly;
     
-    current_positions[idx] = make_double3(d11 * z1  +  d21 * z2, d12 * z1  +  d22 * z2, d13 * z1  +  d23 * z2);
-    current_velocities[idx] = make_double3(d11 * z3  +  d21 * z4, d12 * z3  +  d22 * z4, d13 * z3  +  d23 * z4);
+    current_positions[idx] = make_double3(d11 * z1 + d21 * z2, d12 * z1 + d22 * z2, d13 * z1 + d23 * z2);
+    current_velocities[idx] = make_double3(d11 * z3 + d21 * z4, d12 * z3 + d22 * z4, d13 * z3 + d23 * z4);
 }
 
 
-__device__ __host__ double3 cross(const double3& a, const double3& b)
-{
+__device__ double3 cross(const double3& a, const double3& b) {
     return make_double3(
         a.y * b.z - a.z * b.y,
         a.z * b.x - a.x * b.z,
@@ -97,17 +97,54 @@ __device__ __host__ double3 cross(const double3& a, const double3& b)
     );
 }
 
+__device__ double magnitude(const double3& a) {
+    return sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+}
+
+__device__ double3 magnitude_squared(const double3& a) {
+    return make_double3(a.x * a.x, a.y * a.y, a.z * a.z);
+}
 
 __device__
-double* elements_from_cartesian(
+void elements_from_cartesian(
     double3* current_positions,
     double3* current_velocities,
+    double* vec_inclination, 
+    double* vec_longitude_of_ascending_node, 
+    double* vec_argument_of_perihelion, 
+    double* vec_mean_anomaly,
+    double* vec_eccentricity,
+    double* vec_semi_major_axis,
 ) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     double3 current_p = current_positions[idx];
     double3 current_v = current_velocities[idx];
-    double3 cross_product = cross(current_p, current_v);
+    double3 angular_momentum = cross(current_p, current_v);
+    double h_sq = magnitude_squared(angular_momentum);
+    double inclination = acos(angular_momentum.z / sqrt(h_sq));
+    double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y);
+    // 1.d0  +  s * (v2 / gm  -  2.d0 / r)
+    double v_sq = magnitude_squared(current_v);
+    double r = magnitude(current_p);
+    double s = h_sq / G;
+    double eccentricity = sqrt(1 + s * ((v_sq / G) - (2.00 / r)));
+    double perihelion_distance = s / (1.00 + eccentricity);
+    double cos_e = (v_sq*r - G) / (eccentricity*G);
+    double E_anomaly = acos(cos_e);
+    double M_anomaly = E_anomaly - eccentricity * sin(E_anomaly); 
+    double cos_f = (s - r ) / (eccentricity * r);
+    double f = acos(cos_f);
+    double p = true_longitude - f;
+    p = (p + TWOPI + TWOPI) % TWOPI;
+    double argument_of_perihelion = p - longitude_of_ascending_node;
+    double semi_major_axis = perihelion_distance / (1.00 - eccentricity);
 
+    vec_inclination[idx] = inclination;
+    vec_longitude_of_ascending_node[idx] = longitude_of_ascending_node;
+    vec_argument_of_perihelion[idx] = argument_of_perihelion;
+    vec_mean_anomaly[idx] = M_anomaly;
+    vec_eccentricity[idx] = eccentricity;
+    vec_semi_major_axis[idx] = semi_major_axis;
 }
 
 /*
