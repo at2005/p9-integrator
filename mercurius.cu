@@ -2,12 +2,12 @@
 #include <cuda_runtime.h>
 #include <math.h>
 #include <iostream>
-
-__device__ double CUTOFF = 1e-13;
-__device__ int MAX_ITERATIONS_ROOT_FINDING = 20;
-__device__ __managed__ int NUM_TIMESTEPS_KEPLER = 12;
-__device__ double G = 1;
-__device__ double TWOPI = 6.283185307179586476925286766559005768394338798750211641949;
+#define NUM_BODIES 2
+#define MAX_ITERATIONS_ROOT_FINDING 20
+#define CUTOFF 1e-13
+#define NUM_TIMESTEPS_KEPLER 12
+#define G 1
+#define TWOPI 6.283185307179586476925286766559005768394338798750211641949
 
 // solves kepler's equation for the eccentric anomaly E
 __device__
@@ -222,23 +222,40 @@ void convert_to_democratic_heliocentric_coordinates(double3* positions, double3*
 
 __global__ 
 void mercurius_keplerian_solver(
-    double* vec_argument_of_perihelion,
-    double* vec_mean_anomaly,
-    double* vec_eccentricity,
-    double* vec_semi_major_axis,
-    double* vec_inclination,
-    double* vec_longitude_of_ascending_node,
-    double* masses,
+    double* vec_argument_of_perihelion_hbm,
+    double* vec_mean_anomaly_hbm,
+    double* vec_eccentricity_hbm,
+    double* vec_semi_major_axis_hbm,
+    double* vec_inclination_hbm,
+    double* vec_longitude_of_ascending_node_hbm,
+    double* vec_masses_hbm,
     double dt,
     double3* output_positions
 ) {
-    // declare buffers for positions in SRAM
-    // for now (testing) number of bodies is 2
-    __shared__ double3 positions[2];  
-    __shared__ double3 velocities[2];
-
-    // initialize the buffer for each thread
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
+
+    // declare buffers for positions in SRAM
+    __shared__ double3 positions[NUM_BODIES];  
+    __shared__ double3 velocities[NUM_BODIES];
+    __shared__ double masses[NUM_BODIES + 1];
+    __shared__ double vec_inclination[NUM_BODIES];
+    __shared__ double vec_longitude_of_ascending_node[NUM_BODIES];
+    __shared__ double vec_argument_of_perihelion[NUM_BODIES];
+    __shared__ double vec_mean_anomaly[NUM_BODIES];
+    __shared__ double vec_eccentricity[NUM_BODIES];
+    __shared__ double vec_semi_major_axis[NUM_BODIES];
+
+    // copy data to shared memory
+    // special case to avoid race condition
+    if (idx == 0) masses[0] = vec_masses_hbm[0];
+
+    masses[idx+1] = vec_masses_hbm[idx+1]; 
+    vec_argument_of_perihelion[idx] = vec_argument_of_perihelion_hbm[idx];
+    vec_mean_anomaly[idx] = vec_mean_anomaly_hbm[idx];
+    vec_eccentricity[idx] = vec_eccentricity_hbm[idx];
+    vec_semi_major_axis[idx] = vec_semi_major_axis_hbm[idx];
+    vec_inclination[idx] = vec_inclination_hbm[idx];
+    vec_longitude_of_ascending_node[idx] = vec_longitude_of_ascending_node_hbm[idx];
 
     // initially populate positions and velocities
     cartesian_from_elements(
@@ -252,6 +269,7 @@ void mercurius_keplerian_solver(
         velocities
     );
 
+    __syncthreads();
     // convert to democratic heliocentric coordinates
     convert_to_democratic_heliocentric_coordinates(positions, velocities, masses);
 
@@ -368,7 +386,7 @@ void dump_sim(Sim* sim) {
 __host__
 int main() {
     Sim sim;
-    initialize_std_sim(&sim, 2);
+    initialize_std_sim(&sim, NUM_BODIES);
     double dt = 0.5;
 
     // testing 3-body system
