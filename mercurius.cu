@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <cuda_runtime.h>
 #include <math.h>
+#include <iostream>
 
 __device__ double CUTOFF = 1e-13;
 __device__ int MAX_ITERATIONS_ROOT_FINDING = 20;
-__device__ int NUM_TIMESTEPS_KEPLER = 100000;
-__device__ double G = 6.6743e-11;
+__device__ __managed__ int NUM_TIMESTEPS_KEPLER = 1;
+__device__ double G = 1;
 __device__ double TWOPI = 6.283185307179586476925286766559005768394338798750211641949;
 
 // solves kepler's equation for the eccentric anomaly E
@@ -158,19 +159,18 @@ void body_interaction_kick(double3* positions, double3* velocities, double* mass
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     double3 acc = make_double3(0.0, 0.0, 0.0);
     for(int i = 0; i < blockDim.x; i++) {
-        // so here we convert abs position to democratic heliocentric coordinates
-        // 3-vec displacement, let r = x, y, z, this is the direction of the acceleration
+        if(i == idx) continue;
+       // 3-vec displacement, let r = x, y, z, this is the direction of the acceleration
         double dist_x = positions[i].x - positions[idx].x;
         double dist_y = positions[i].y - positions[idx].y;
         double dist_z = positions[i].z - positions[idx].z;
         double r = sqrt(dist_x * dist_x + dist_y * dist_y + dist_z * dist_z);
         // magnitude of acceleration = mass_of_main_body * -G / |r|^3
         double weighted_acceleration = changeover(r) * masses[0] * G / pow(r, 3);
-        // accumulate total acceleration due to all bodies
-        double comp = i == idx ? 1.0 : 0.0;
-        acc.x -= comp * weighted_acceleration * dist_x;
-        acc.y -= comp * weighted_acceleration * dist_y;
-        acc.z -= comp * weighted_acceleration * dist_z;
+        // accumulate total acceleration due to all bodies, except self
+        acc.x -= weighted_acceleration * dist_x;
+        acc.y -= weighted_acceleration * dist_y;
+        acc.z -= weighted_acceleration * dist_z;
     }
 
     // update momenta (velocity here) with total acceleration
@@ -180,19 +180,44 @@ void body_interaction_kick(double3* positions, double3* velocities, double* mass
 }
 
 __device__
-void main_body_kinetic(double3* positions, double3* velocities, double* masses, double main_body_mass, double dt) {
+void main_body_kinetic(double3* positions, double3* velocities, double* masses, double dt) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     double3 p = make_double3(0.0, 0.0, 0.0);
     // calculate total momentum of all bodies
-    for(int i = 0; i < blockDim.x; i++) {
-        p.x += velocities[i].x * masses[i];
-        p.y += velocities[i].y * masses[i];
-        p.z += velocities[i].z * masses[i];
+    for(int i = 1; i < blockDim.x + 1; i++) {
+        p.x += velocities[i-1].x * masses[i];
+        p.y += velocities[i-1].y * masses[i];
+        p.z += velocities[i-1].z * masses[i];
     }
-    double scaling_factor = dt/(2.00 * main_body_mass);
+
+    double scaling_factor = dt/(masses[0]);
     positions[idx].x += p.x * scaling_factor;
     positions[idx].y += p.y * scaling_factor;
     positions[idx].z += p.z * scaling_factor;
+}
+
+
+__device__
+void convert_to_democratic_heliocentric_coordinates(double3* positions, double3* velocities, double* masses) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    double total_mass = 0.0;
+    double3 mass_weighted_v = make_double3(0.0, 0.0, 0.0);
+    for(int i = 0; i < blockDim.x; i++) {
+        total_mass += masses[i + 1];
+        mass_weighted_v.x += masses[i + 1] * velocities[i].x;
+        mass_weighted_v.y += masses[i + 1] * velocities[i].y;
+        mass_weighted_v.z += masses[i + 1] * velocities[i].z;
+    }
+
+    double scaling_factor = 1.00 / (total_mass + masses[0]);
+    mass_weighted_v.x *= scaling_factor;
+    mass_weighted_v.y *= scaling_factor;
+    mass_weighted_v.z *= scaling_factor;
+
+    velocities[idx].x -= mass_weighted_v.x;
+    velocities[idx].y -= mass_weighted_v.y;
+    velocities[idx].z -= mass_weighted_v.z;
+    
 }
 
 __global__ 
@@ -205,16 +230,17 @@ void mercurius_keplerian_solver(
     double* vec_longitude_of_ascending_node,
     double* masses,
     double dt,
-    int NUM_BODIES
+    double3* output_positions
 ) {
     // declare buffers for positions in SRAM
-    extern __shared__ double3 shared_memory[];
-    double3* positions = shared_memory;
-    double3* velocities = (double3*)&positions[NUM_BODIES];
+    // for now (testing) number of bodies is 2
+    __shared__ double3 positions[2];  
+    __shared__ double3 velocities[2];
 
     // initialize the buffer for each thread
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
-    // populate positions and velocities
+
+    // initially populate positions and velocities
     cartesian_from_elements(
         vec_inclination,
         vec_longitude_of_ascending_node,
@@ -226,10 +252,15 @@ void mercurius_keplerian_solver(
         velocities
     );
 
+    // convert to democratic heliocentric coordinates
+    // convert_to_democratic_heliocentric_coordinates(positions, velocities, masses);
+
     for(int i = 0; i < NUM_TIMESTEPS_KEPLER; i++) {
-        body_interaction_kick(positions, velocities, masses, dt/2.00);
-        main_body_kinetic(positions, velocities, masses, masses[0], dt/2.00);
-       
+        // body_interaction_kick(positions, velocities, masses, dt/2.00);
+        // main_body_kinetic(positions, velocities, masses, dt/2.00);
+        double semi_major_axis = vec_semi_major_axis[idx];
+        double n = 1.00 / (semi_major_axis * semi_major_axis * semi_major_axis); 
+        
         elements_from_cartesian(
             positions,
             velocities,
@@ -240,6 +271,9 @@ void mercurius_keplerian_solver(
             vec_eccentricity,
             vec_semi_major_axis
         );
+        
+        // advance mean anomaly, this is essentially advancing to the next timestep
+        vec_mean_anomaly[idx] = fmod(n * dt + vec_mean_anomaly[idx], TWOPI);
 
         cartesian_from_elements(
             vec_inclination,
@@ -252,17 +286,170 @@ void mercurius_keplerian_solver(
             velocities
         );
         
-        main_body_kinetic(positions, velocities, masses, masses[0], dt/2.00);
-        body_interaction_kick(positions, velocities, masses, dt/2.00);
+        // main_body_kinetic(positions, velocities, masses, dt/2.00);
+        // body_interaction_kick(positions, velocities, masses, dt/2.00);
+
+        __syncthreads();
+    }
+    
+    output_positions[idx] = positions[idx];
+}
+
+
+struct Body {
+    double inclination;
+    double longitude_of_ascending_node;
+    double argument_of_perihelion;
+    double mean_anomaly;
+    double eccentricity;
+    double semi_major_axis;
+    double mass;
+};
+
+struct Sim {
+    int num_bodies;
+    double3* positions;
+    double3* velocities;
+    double* masses;
+    double* vec_inclination;
+    double* vec_longitude_of_ascending_node;
+    double* vec_argument_of_perihelion;
+    double* vec_mean_anomaly;
+    double* vec_eccentricity;
+    double* vec_semi_major_axis;
+};
+
+__host__
+void initialize_std_sim(Sim* sim, int num_bodies) {
+    sim->vec_inclination = (double*)malloc(num_bodies * sizeof(double));
+    sim->vec_longitude_of_ascending_node = (double*)malloc(num_bodies * sizeof(double));
+    sim->vec_argument_of_perihelion = (double*)malloc(num_bodies * sizeof(double));
+    sim->vec_mean_anomaly = (double*)malloc(num_bodies * sizeof(double));
+    sim->vec_eccentricity = (double*)malloc(num_bodies * sizeof(double));
+    sim->vec_semi_major_axis = (double*)malloc(num_bodies * sizeof(double));
+    sim->masses = (double*)malloc((num_bodies+1) * sizeof(double));
+
+    // assume convention that main body mass is 1
+    sim->masses[0] = 1.0;
+    sim->num_bodies = num_bodies;
+}
+
+__host__
+void add_body_to_sim(Sim* sim, Body body, int idx) {
+    sim->vec_inclination[idx] = body.inclination;
+    sim->vec_longitude_of_ascending_node[idx] = body.longitude_of_ascending_node;
+    sim->vec_argument_of_perihelion[idx] = body.argument_of_perihelion;
+    sim->vec_mean_anomaly[idx] = body.mean_anomaly;
+    sim->vec_eccentricity[idx] = body.eccentricity;
+    sim->vec_semi_major_axis[idx] = body.semi_major_axis;
+    sim->masses[idx+1] = body.mass;
+}
+
+
+void dump_sim(Sim* sim) {
+    std::cout << "Simulation with " << sim->num_bodies << " bodies" << std::endl;
+    std::cout << "Main body mass: " << sim->masses[0] << std::endl;
+    for(int i = 0; i < sim->num_bodies; i++) {
+        std::cout << "Body: " << i << std::endl;
+        std::cout << "inclination: " << sim->vec_inclination[i] << std::endl;
+        std::cout << "longitude of ascending node: " << sim->vec_longitude_of_ascending_node[i] << std::endl;
+        std::cout << "argument of perihelion: " << sim->vec_argument_of_perihelion[i] << std::endl;
+        std::cout << "mean anomaly: " << sim->vec_mean_anomaly[i] << std::endl;
+        std::cout << "eccentricity: " << sim->vec_eccentricity[i] << std::endl;
+        std::cout << "semi major axis: " << sim->vec_semi_major_axis[i] << std::endl;
+        std::cout << "mass: " << sim->masses[i+1] << std::endl << std::endl;
     }
 }
 
-__device__
-void burlisch_stoer() {
+__host__
+int main() {
+    Sim sim;
+    initialize_std_sim(&sim, 2);
+    double3* output_positions = (double3*)malloc(sim.num_bodies * sizeof(double3));
+    double dt = 0.5;
+
+    // testing 3-body system
+    Body Earth;
+    Earth.inclination = 0.00005 * M_PI / 180.0;
+    Earth.longitude_of_ascending_node = -11.26064 * M_PI / 180.0;
+    Earth.argument_of_perihelion = 102.94719 * M_PI / 180.0;
+    Earth.mean_anomaly = 100.46435 * M_PI / 180.0;
+    Earth.eccentricity = 0.01671022;
+    Earth.semi_major_axis = 1.00000011;
+    Earth.mass = 5.97237e24 / 1.98855e30;
+
+    // add body to simulation
+    add_body_to_sim(&sim, Earth, 0);
+
+    Body Mars;
+    Mars.inclination = 1.848 * M_PI / 180.0;
+    Mars.longitude_of_ascending_node = 49.57854 * M_PI / 180.0;
+    Mars.argument_of_perihelion = 336.04084 * M_PI / 180.0;
+    Mars.mean_anomaly = 0.001;
+    Mars.eccentricity = 0.0934;
+    Mars.semi_major_axis = 1.5;
+    Mars.mass = 0.000954588;
+
+    // yay now we add mars to the simulation
+    add_body_to_sim(&sim, Mars, 1);
     
+    dump_sim(&sim);
+
+    double *vec_longitude_of_ascending_node_device, *vec_inclination_device, *vec_argument_of_perihelion_device, 
+        *vec_mean_anomaly_device, *vec_eccentricity_device, *vec_semi_major_axis_device, *masses_device;
+    double3 *output_positions_device;
+
+    cudaMalloc((void**)&vec_longitude_of_ascending_node_device, sim.num_bodies * sizeof(double));
+    cudaMalloc((void**)&vec_inclination_device, sim.num_bodies * sizeof(double));
+    cudaMalloc((void**)&vec_argument_of_perihelion_device, sim.num_bodies * sizeof(double));
+    cudaMalloc((void**)&vec_mean_anomaly_device, sim.num_bodies * sizeof(double));
+    cudaMalloc((void**)&vec_eccentricity_device, sim.num_bodies * sizeof(double));
+    cudaMalloc((void**)&vec_semi_major_axis_device, sim.num_bodies * sizeof(double));
+    cudaMalloc((void**)&masses_device, (sim.num_bodies + 1) * sizeof(double));
+    cudaMalloc((void**)&output_positions_device, sim.num_bodies * sizeof(double3));
+
+    cudaMemcpy(vec_longitude_of_ascending_node_device, sim.vec_longitude_of_ascending_node, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(vec_inclination_device, sim.vec_inclination, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(vec_argument_of_perihelion_device, sim.vec_argument_of_perihelion, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(vec_mean_anomaly_device, sim.vec_mean_anomaly, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(vec_eccentricity_device, sim.vec_eccentricity, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(vec_semi_major_axis_device, sim.vec_semi_major_axis, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(masses_device, sim.masses, (sim.num_bodies+1) * sizeof(double), cudaMemcpyHostToDevice);
+
+    std::cout << "Launching kernel on " << sim.num_bodies << " threads" << std::endl;
+    mercurius_keplerian_solver<<<1, sim.num_bodies>>>(
+        vec_argument_of_perihelion_device,
+        vec_mean_anomaly_device,
+        vec_eccentricity_device,
+        vec_semi_major_axis_device,
+        vec_inclination_device,
+        vec_longitude_of_ascending_node_device,
+        masses_device,
+        dt,
+        output_positions_device
+    );
+
+    std::cout << "Synchronizing...\n";
+    cudaDeviceSynchronize();
+    cudaMemcpy(output_positions, output_positions_device, sim.num_bodies * sizeof(double3), cudaMemcpyDeviceToHost);
+
+    // print output positions
+    std::cout << "Output positions:" << std::endl;
+    // for(int i = 0; i < NUM_TIMESTEPS_KEPLER; i++) {
+        // std::cout << "timestep " << i << std::endl;
+        for(int j = 0; j < sim.num_bodies; j++) {
+            std::cout << output_positions[j].x << " " << output_positions[j].y << " " << output_positions[j].z << std::endl;
+        }
+    // }
+
+    cudaFree(vec_longitude_of_ascending_node_device);
+    cudaFree(vec_inclination_device);
+    cudaFree(vec_argument_of_perihelion_device);
+    cudaFree(vec_mean_anomaly_device);
+    cudaFree(vec_eccentricity_device);
+    cudaFree(vec_semi_major_axis_device);
+    cudaFree(masses_device);
+    cudaFree(output_positions_device);
+    cudaDeviceReset();    
 }
-
-__global__
-void mercurius() {
-
-} 
+ 
