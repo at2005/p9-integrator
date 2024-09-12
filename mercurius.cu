@@ -5,7 +5,7 @@
 
 __device__ double CUTOFF = 1e-13;
 __device__ int MAX_ITERATIONS_ROOT_FINDING = 20;
-__device__ __managed__ int NUM_TIMESTEPS_KEPLER = 1;
+__device__ __managed__ int NUM_TIMESTEPS_KEPLER = 12;
 __device__ double G = 1;
 __device__ double TWOPI = 6.283185307179586476925286766559005768394338798750211641949;
 
@@ -288,11 +288,15 @@ void mercurius_keplerian_solver(
         
         main_body_kinetic(positions, velocities, masses, dt/2.00);
         body_interaction_kick(positions, velocities, masses, dt/2.00);
+        // basically the layout here is:
+        // [[body0, body1, body2, ...], [body0, body1, body2, ...], ...]
+        // where each subarray is a timestep
+        // so we need to index into the timestep and then add idx to index a particular body
+        output_positions[i* blockDim.x + idx] = positions[idx];
 
         __syncthreads();
     }
     
-    output_positions[idx] = positions[idx];
 }
 
 
@@ -365,7 +369,6 @@ __host__
 int main() {
     Sim sim;
     initialize_std_sim(&sim, 2);
-    double3* output_positions = (double3*)malloc(sim.num_bodies * sizeof(double3));
     double dt = 0.5;
 
     // testing 3-body system
@@ -385,19 +388,22 @@ int main() {
     Mars.inclination = 1.848 * M_PI / 180.0;
     Mars.longitude_of_ascending_node = 49.57854 * M_PI / 180.0;
     Mars.argument_of_perihelion = 336.04084 * M_PI / 180.0;
-    Mars.mean_anomaly = 0.001;
+    Mars.mean_anomaly = 0.1;
     Mars.eccentricity = 0.0934;
     Mars.semi_major_axis = 1.5;
     Mars.mass = 0.000954588;
 
     // yay now we add mars to the simulation
     add_body_to_sim(&sim, Mars, 1);
-    
+
+    // print sim information 
     dump_sim(&sim);
 
+    // this is bc we need to allocate memory on the device
     double *vec_longitude_of_ascending_node_device, *vec_inclination_device, *vec_argument_of_perihelion_device, 
         *vec_mean_anomaly_device, *vec_eccentricity_device, *vec_semi_major_axis_device, *masses_device;
     double3 *output_positions_device;
+    double3* output_positions = (double3*)malloc(sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS_KEPLER);
 
     cudaMalloc((void**)&vec_longitude_of_ascending_node_device, sim.num_bodies * sizeof(double));
     cudaMalloc((void**)&vec_inclination_device, sim.num_bodies * sizeof(double));
@@ -406,7 +412,7 @@ int main() {
     cudaMalloc((void**)&vec_eccentricity_device, sim.num_bodies * sizeof(double));
     cudaMalloc((void**)&vec_semi_major_axis_device, sim.num_bodies * sizeof(double));
     cudaMalloc((void**)&masses_device, (sim.num_bodies + 1) * sizeof(double));
-    cudaMalloc((void**)&output_positions_device, sim.num_bodies * sizeof(double3));
+    cudaMalloc((void**)&output_positions_device, sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS_KEPLER);
 
     cudaMemcpy(vec_longitude_of_ascending_node_device, sim.vec_longitude_of_ascending_node, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(vec_inclination_device, sim.vec_inclination, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
@@ -431,16 +437,16 @@ int main() {
 
     std::cout << "Synchronizing...\n";
     cudaDeviceSynchronize();
-    cudaMemcpy(output_positions, output_positions_device, sim.num_bodies * sizeof(double3), cudaMemcpyDeviceToHost);
+    cudaMemcpy(output_positions, output_positions_device, sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS_KEPLER, cudaMemcpyDeviceToHost);
 
     // print output positions
     std::cout << "Output positions:" << std::endl;
-    // for(int i = 0; i < NUM_TIMESTEPS_KEPLER; i++) {
-        // std::cout << "timestep " << i << std::endl;
+    for(int i = 0; i < NUM_TIMESTEPS_KEPLER; i++) {
+        std::cout << "Timestep " << i << std::endl;
         for(int j = 0; j < sim.num_bodies; j++) {
-            std::cout << output_positions[j].x << " " << output_positions[j].y << " " << output_positions[j].z << std::endl;
+            std::cout << output_positions[i*sim.num_bodies + j].x << " " << output_positions[i*sim.num_bodies + j].y << " " << output_positions[i*sim.num_bodies + j].z << std::endl;
         }
-    // }
+    }
 
     cudaFree(vec_longitude_of_ascending_node_device);
     cudaFree(vec_inclination_device);
