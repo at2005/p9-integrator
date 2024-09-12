@@ -458,3 +458,4 @@ int main() {
     cudaFree(output_positions_device);
     cudaDeviceReset();    
 }
+ 
