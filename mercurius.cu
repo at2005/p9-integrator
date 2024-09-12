@@ -253,11 +253,11 @@ void mercurius_keplerian_solver(
     );
 
     // convert to democratic heliocentric coordinates
-    // convert_to_democratic_heliocentric_coordinates(positions, velocities, masses);
+    convert_to_democratic_heliocentric_coordinates(positions, velocities, masses);
 
     for(int i = 0; i < NUM_TIMESTEPS_KEPLER; i++) {
-        // body_interaction_kick(positions, velocities, masses, dt/2.00);
-        // main_body_kinetic(positions, velocities, masses, dt/2.00);
+        body_interaction_kick(positions, velocities, masses, dt/2.00);
+        main_body_kinetic(positions, velocities, masses, dt/2.00);
         double semi_major_axis = vec_semi_major_axis[idx];
         double n = 1.00 / (semi_major_axis * semi_major_axis * semi_major_axis); 
         
@@ -286,8 +286,8 @@ void mercurius_keplerian_solver(
             velocities
         );
         
-        // main_body_kinetic(positions, velocities, masses, dt/2.00);
-        // body_interaction_kick(positions, velocities, masses, dt/2.00);
+        main_body_kinetic(positions, velocities, masses, dt/2.00);
+        body_interaction_kick(positions, velocities, masses, dt/2.00);
 
         __syncthreads();
     }
@@ -452,4 +452,3 @@ int main() {
     cudaFree(output_positions_device);
     cudaDeviceReset();    
 }
- 
