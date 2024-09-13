@@ -15,10 +15,12 @@ double danby_burkardt(double mean_anomaly, double eccentricity) {
     // init eccentric anomaly to mean anomaly
     double E = mean_anomaly;
     for(int i = 0; i < MAX_ITERATIONS_ROOT_FINDING; i++) {
-        double e_sin = eccentricity * sin(E);
+        double sin_E, cos_E;
+        sincos(E, &sin_E, &cos_E);
+        double e_sin = eccentricity * sin_E;
         double f = E - e_sin - mean_anomaly;
         if(fabs(f) < CUTOFF) break;
-        double e_cos = eccentricity * cos(E);
+        double e_cos = eccentricity * cos_E;
         double f_prime = 1 - e_cos; 
         double dE =  - f / f_prime;
         dE = - f / (f_prime + dE*e_sin / 2.00);
@@ -59,12 +61,10 @@ void cartesian_from_elements(
     double eccentricity = vec_eccentricity[idx];
     double semi_major_axis = vec_semi_major_axis[idx];
 
-    double cos_i = cos(inclination);
-    double sin_i = sin(inclination);
-    double cos_o = cos(longitude_of_ascending_node);
-    double sin_o = sin(longitude_of_ascending_node);
-    double cos_a = cos(argument_of_perihelion);
-    double sin_a = sin(argument_of_perihelion);
+    double cos_i, sin_i, cos_o, sin_o, cos_a, sin_a;
+    sincos(inclination, &sin_i, &cos_i);
+    sincos(longitude_of_ascending_node, &sin_o, &cos_o);
+    sincos(argument_of_perihelion, &sin_a, &cos_a);
     
     double z1 = cos_a * cos_o;
     double z2 = cos_a * sin_o;
@@ -79,8 +79,8 @@ void cartesian_from_elements(
    
     double romes = sqrt(1 - eccentricity*eccentricity);
     double eccentric_anomaly = danby_burkardt(mean_anomaly, eccentricity);
-    double sin_e = sin(eccentric_anomaly);
-    double cos_e = cos(eccentric_anomaly);
+    double sin_e, cos_e;
+    sincos(eccentric_anomaly, &sin_e, &cos_e);
     z1 = semi_major_axis * (cos_e - eccentricity);
     z2 = semi_major_axis * romes * sin_e;
     eccentric_anomaly = sqrt(G/semi_major_axis) / (1.0 - eccentricity*cos_e);
@@ -126,6 +126,7 @@ void elements_from_cartesian(
     double epsilon = 1e-8;
     double h_sq = magnitude_squared(angular_momentum).x + magnitude_squared(angular_momentum).y + magnitude_squared(angular_momentum).z + epsilon;
     double inclination = acos(angular_momentum.z / sqrt(h_sq));
+    // TODO: find way to do this without branching
     double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y == 0.0 ? 0.0 : -angular_momentum.y);
     double v_sq = magnitude_squared(current_v).x + magnitude_squared(current_v).y + magnitude_squared(current_v).z;
     double r = magnitude(current_p);
@@ -134,14 +135,16 @@ void elements_from_cartesian(
     double perihelion_distance = s / (1.00 + eccentricity);
     double cos_e = (v_sq*r - G) / (eccentricity*G);
     double E_anomaly = acos(cos_e);
-    double M_anomaly = E_anomaly - eccentricity * sin(E_anomaly); 
+    // NOTE: replaced sin(E_anomaly) with (1 - cos_e * cos_e)
+    double M_anomaly = E_anomaly - eccentricity * (1 - cos_e * cos_e); 
     double cos_f = (s - r ) / (eccentricity * r);
     double f = acos(cos_f);
 
+    double cos_i = cos(inclination);
     double to = -angular_momentum.x / angular_momentum.y;
-    double temp = (1.00 - cos(inclination)) * to;
+    double temp = (1.00 - cos_i) * to;
     double temp2 = to * to;
-    double true_longitude = atan2((current_p.y * (1.00 + temp2 * cos(inclination)) - current_p.x * temp), (current_p.x * (temp2 + cos(inclination)) - current_p.y * temp));
+    double true_longitude = atan2((current_p.y * (1.00 + temp2 * cos_i) - current_p.x * temp), (current_p.x * (temp2 + cos_i) - current_p.y * temp));
 
     double p = true_longitude - f;
     p = fmod(p + TWOPI + TWOPI, TWOPI);
