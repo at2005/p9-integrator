@@ -34,11 +34,10 @@ double danby_burkardt(double mean_anomaly, double eccentricity) {
 
 __device__
 double changeover(double r_ij) {
-    // double r_crit = 0.001;
-    // double y = (r_ij - 0.1*r_crit) / (0.9*r_crit);
-    // double K = y*y / (2*y*y - 2*y + 1);
-    // return K;
-    return 1.0;
+    double r_crit = 0.001;
+    double y = (r_ij - 0.1*r_crit) / (0.9*r_crit);
+    double K = y*y / (2*y*y - 2*y + 1);
+    return K;
 }
 
 __device__
