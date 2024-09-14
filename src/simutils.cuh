@@ -1,3 +1,5 @@
+// A set of host utils for creating and interacting with the simulation
+
 #ifndef __SIMUTILS_CUH__
 #define __SIMUTILS_CUH__
 
@@ -5,12 +7,7 @@
 #include <cuda_runtime.h>
 #include <math.h>
 #include <iostream>
-#define NUM_BODIES 2
-#define MAX_ITERATIONS_ROOT_FINDING 20
-#define CUTOFF 1e-13
-#define NUM_TIMESTEPS 200
-#define G 1
-#define TWOPI 6.283185307179586476925286766559005768394338798750211641949
+#include "constants.cuh"
 
 struct Body {
     double inclination;
