@@ -240,8 +240,9 @@ void mercurius_keplerian_solver(
     double* vec_inclination_hbm,
     double* vec_longitude_of_ascending_node_hbm,
     double* vec_masses_hbm,
+    double3* output_positions,
     double dt,
-    double3* output_positions
+    int NUM_TIMESTEPS 
 ) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
 

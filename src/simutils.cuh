@@ -23,6 +23,7 @@ struct Body {
 
 struct Sim {
     int num_bodies;
+    int num_timesteps;
     double3* positions;
     double3* velocities;
     double* masses;
@@ -36,7 +37,7 @@ struct Sim {
 };
 
 __host__
-void initialize_std_sim(Sim* sim, int num_bodies) {
+void initialize_std_sim(Sim* sim, int num_bodies, int num_timesteps) {
     sim->vec_inclination = (double*)malloc(num_bodies * sizeof(double));
     sim->vec_longitude_of_ascending_node = (double*)malloc(num_bodies * sizeof(double));
     sim->vec_argument_of_perihelion = (double*)malloc(num_bodies * sizeof(double));
@@ -49,6 +50,7 @@ void initialize_std_sim(Sim* sim, int num_bodies) {
     // assume convention that main body mass is 1
     sim->masses[0] = 1.0;
     sim->num_bodies = num_bodies;
+    sim->num_timesteps = num_timesteps;
 }
 
 __host__
@@ -80,7 +82,7 @@ void dump_sim(Sim* sim) {
 }
 
 __host__
-void args_parse(int argc, char** argv, bool* print_sim_info, bool* print_positions) {
+void args_parse(int argc, char** argv, bool* print_sim_info, bool* print_positions, int* num_timesteps) {
     for(int i = 0; i < argc; i++) {
         // print sim info
         if(!strcmp(argv[i], "-i")) {
@@ -91,12 +93,16 @@ void args_parse(int argc, char** argv, bool* print_sim_info, bool* print_positio
         if(!strcmp(argv[i], "-p")) {
             *print_positions = true;
         }
+
+        if(!strcmp(argv[i], "-t")) {
+            *num_timesteps = atoi(argv[i+1]);
+        }
     }
 }
 
 __host__
 void pretty_print_positions(Sim* sim, double3* output_positions) {
-    for(int i = 0; i < NUM_TIMESTEPS; i++) {
+    for(int i = 0; i < sim->num_timesteps; i++) {
         std::cout << "Timestep " << i << std::endl;
         for(int j = 0; j < sim->num_bodies; j++) {
             std::cout << sim->body_names[j] << ": " << output_positions[i*sim->num_bodies + j].x << " " << output_positions[i*sim->num_bodies + j].y << " " << output_positions[i*sim->num_bodies + j].z << std::endl;

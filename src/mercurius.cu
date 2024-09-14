@@ -3,9 +3,16 @@
 
 __host__
 int main(int argc, char** argv) {
+        // cli args
+    bool print_sim_info = false;
+    bool print_positions = false;
+    // default is one orbital period (of Earth)
+    int NUM_TIMESTEPS = 1;
+    args_parse(argc, argv, &print_sim_info, &print_positions, &NUM_TIMESTEPS);
+
     Sim sim;
-    initialize_std_sim(&sim, NUM_BODIES);
-    double dt = 0.5;
+    initialize_std_sim(&sim, NUM_BODIES, NUM_TIMESTEPS);
+    double dt = 0.08;
 
     // testing 3-body system
     Body Earth;
@@ -34,7 +41,7 @@ int main(int argc, char** argv) {
     // yay now we add mars to the simulation
     add_body_to_sim(&sim, Mars, 1);
 
-    // this is bc we need to allocate memory on the device
+    // this is bc we need to allocate memory on the device (on HBM – global memory, copy to SRAM later)
     double *vec_longitude_of_ascending_node_device, *vec_inclination_device, *vec_argument_of_perihelion_device, 
         *vec_mean_anomaly_device, *vec_eccentricity_device, *vec_semi_major_axis_device, *masses_device;
     double3 *output_positions_device;
@@ -57,10 +64,7 @@ int main(int argc, char** argv) {
     cudaMemcpy(vec_semi_major_axis_device, sim.vec_semi_major_axis, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(masses_device, sim.masses, (sim.num_bodies+1) * sizeof(double), cudaMemcpyHostToDevice);
 
-    bool print_sim_info = false;
-    bool print_positions = false;
-    args_parse(argc, argv, &print_sim_info, &print_positions);
- 
+
     // print sim information 
     if(print_sim_info) {
         dump_sim(&sim);
@@ -75,8 +79,9 @@ int main(int argc, char** argv) {
         vec_inclination_device,
         vec_longitude_of_ascending_node_device,
         masses_device,
+        output_positions_device,
         dt,
-        output_positions_device
+       NUM_TIMESTEPS
     );
 
     if(print_sim_info) std::cout << "Simulation Finished. Synchronizing...\n";
