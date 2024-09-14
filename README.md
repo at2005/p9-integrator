@@ -6,11 +6,12 @@ TODO: Burlisch Stoer integrator during close encounters
 
 ## Compiling
 
-To compile, simply run `make` in the root directory. This will create a binary in the `bin` directory.
+To compile, run `make` in the root directory. This will create a binary in the `bin` directory.
 
 ## Running
 
-To run, simply run `./bin/mint` with a set of optional command line arguments:
+Run the binary using `./bin/mint` with a set of optional command line arguments:
 
 - `-i` prints simulation information
 - `-p` prints output positions
+- `-t` sets the number of timesteps to run the simulation for (default is 1)
