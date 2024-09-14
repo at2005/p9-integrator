@@ -178,6 +178,7 @@ void body_interaction_kick(double3* positions, double3* velocities, double* mass
     for(int i = 0; i < NUM_BODIES; i++) {
         if(i == idx) continue;
        // 3-vec displacement, let r = x, y, z, this is the direction of the acceleration
+        // it is directed towards the other body since gravity is attractive
         dist_x = positions[i].x - positions[idx].x;
         dist_y = positions[i].y - positions[idx].y;
         dist_z = positions[i].z - positions[idx].z;
@@ -405,8 +406,23 @@ void dump_sim(Sim* sim) {
     }
 }
 
+void args_parse(int argc, char** argv, bool* print_sim_info, bool* print_positions) {
+    for(int i = 0; i < argc; i++) {
+        // print sim info
+        if(!strcmp(argv[i], "-i")) {
+           *print_sim_info = true;
+           continue;
+        }
+
+        if(!strcmp(argv[i], "-p")) {
+            *print_positions = true;
+        }
+    }
+}
+
+
 __host__
-int main() {
+int main(int argc, char** argv) {
     Sim sim;
     initialize_std_sim(&sim, NUM_BODIES);
     double dt = 0.5;
@@ -436,9 +452,6 @@ int main() {
     // yay now we add mars to the simulation
     add_body_to_sim(&sim, Mars, 1);
 
-    // print sim information 
-    dump_sim(&sim);
-
     // this is bc we need to allocate memory on the device
     double *vec_longitude_of_ascending_node_device, *vec_inclination_device, *vec_argument_of_perihelion_device, 
         *vec_mean_anomaly_device, *vec_eccentricity_device, *vec_semi_major_axis_device, *masses_device;
@@ -462,7 +475,16 @@ int main() {
     cudaMemcpy(vec_semi_major_axis_device, sim.vec_semi_major_axis, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(masses_device, sim.masses, (sim.num_bodies+1) * sizeof(double), cudaMemcpyHostToDevice);
 
-    std::cout << "Launching kernel on " << sim.num_bodies << " threads" << std::endl;
+    bool print_sim_info = false;
+    bool print_positions = false;
+    args_parse(argc, argv, &print_sim_info, &print_positions);
+ 
+    // print sim information 
+    if(print_sim_info) {
+        dump_sim(&sim);
+        std::cout << "Launching kernel on " << sim.num_bodies << " threads" << std::endl;
+    }
+
     mercurius_keplerian_solver<<<1, sim.num_bodies>>>(
         vec_argument_of_perihelion_device,
         vec_mean_anomaly_device,
@@ -475,16 +497,19 @@ int main() {
         output_positions_device
     );
 
-    std::cout << "Synchronizing...\n";
+    if(print_sim_info) std::cout << "Simulation Finished. Synchronizing...\n";
     cudaDeviceSynchronize();
     cudaMemcpy(output_positions, output_positions_device, sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS, cudaMemcpyDeviceToHost);
+    
 
-    // print output positions
-    std::cout << "Output positions:" << std::endl;
-    for(int i = 0; i < NUM_TIMESTEPS; i++) {
-        std::cout << "Timestep " << i << std::endl;
-        for(int j = 0; j < sim.num_bodies; j++) {
-            std::cout << output_positions[i*sim.num_bodies + j].x << " " << output_positions[i*sim.num_bodies + j].y << " " << output_positions[i*sim.num_bodies + j].z << std::endl;
+   if(print_positions) {
+        std::cout << "Output positions:" << std::endl;
+        for(int i = 0; i < NUM_TIMESTEPS; i++) {
+            std::cout << "Timestep " << i << std::endl;
+            for(int j = 0; j < sim.num_bodies; j++) {
+                std::cout << output_positions[i*sim.num_bodies + j].x << " " << output_positions[i*sim.num_bodies + j].y << " " << output_positions[i*sim.num_bodies + j].z << std::endl;
+            }
+            std::cout << std::endl;
         }
     }
 

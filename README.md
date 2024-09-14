@@ -10,4 +10,7 @@ To compile, simply run `make` in the root directory. This will create a binary i
 
 ## Running
 
-To run, simply run `./bin/mint`.
+To run, simply run `./bin/mint` with a set of optional command line arguments:
+
+- `-i` prints simulation information
+- `-p` prints output positions
