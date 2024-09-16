@@ -192,7 +192,7 @@ void body_interaction_kick(double3* positions, double3* velocities, double* mass
         double epsilon = 1e-8;
         double r = sqrt(dist_x * dist_x + dist_y * dist_y + dist_z * dist_z);
         // // magnitude of acceleration = mass_of_other_body * G / |r|^3
-        double weighted_acceleration = changeover(r) * masses[i] * G / pow(r + epsilon, 3);
+        double weighted_acceleration = changeover(r) * masses[i+1] * G / pow(r + epsilon, 3);
         // // accumulate total acceleration due to all bodies, except self
         acc.x += weighted_acceleration * dist_x;
         acc.y += weighted_acceleration * dist_y;
