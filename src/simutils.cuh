@@ -7,7 +7,9 @@
 #include <cuda_runtime.h>
 #include <math.h>
 #include <iostream>
+#include <fstream>
 #include "constants.cuh"
+#include "json.hpp"
 
 struct Body {
     double inclination;
@@ -19,7 +21,6 @@ struct Body {
     double mass;
     std::string name;
 };
-
 
 struct Sim {
     int num_bodies;
@@ -103,11 +104,57 @@ void args_parse(int argc, char** argv, bool* print_sim_info, bool* print_positio
 __host__
 void pretty_print_positions(Sim* sim, double3* output_positions) {
     for(int i = 0; i < sim->num_timesteps; i++) {
-        std::cout << "Timestep " << i << std::endl;
+        std::cout << "# Timestep " << i << std::endl;
         for(int j = 0; j < sim->num_bodies; j++) {
             std::cout << sim->body_names[j] << ": " << output_positions[i*sim->num_bodies + j].x << " " << output_positions[i*sim->num_bodies + j].y << " " << output_positions[i*sim->num_bodies + j].z << std::endl;
         }
         std::cout << std::endl;
+    }
+
+    std::cout << std::endl;
+
+}
+
+
+__host__
+void sim_from_config_file(Sim* sim, std::string config_file, int num_timesteps) {
+    /*
+    The structure of the JSON config file is as follows:
+
+    {
+        "bodies": [
+            {
+                "name": "Earth",
+                "mass": 5.97237e24,
+                "semi_major_axis": 1.00000011,
+                "eccentricity": 0.01671022,
+                "inclination": 0.00005 * M_PI / 180.0,
+                "longitude_of_ascending_node": -11.26064 * M_PI / 180.0,
+                "argument_of_perihelion": 102.94719 * M_PI / 180.0,
+                "mean_anomaly": 100.46435 * M_PI / 180.0,
+                "orbital_period": 365.256363004 * 24.0 * 60.0 * 60.0
+            },
+
+            etc.
+    }
+    */
+    std::ifstream config_file_stream(config_file);
+    nlohmann::json config_file_json = nlohmann::json::parse(config_file_stream);
+    auto bodies = config_file_json["bodies"];
+    int num_bodies = bodies.size();   
+    initialize_std_sim(sim, num_bodies, num_timesteps);
+    for(int i = 0; i < num_bodies; i++) {
+        auto body = bodies[i];
+        Body sim_body;
+        sim_body.name = body["name"];
+        sim_body.mass = body["mass"];
+        sim_body.semi_major_axis = body["semi_major_axis"];
+        sim_body.eccentricity = body["eccentricity"];
+        sim_body.inclination = body["inclination"];
+        sim_body.longitude_of_ascending_node = body["longitude_of_ascending_node"];
+        sim_body.argument_of_perihelion = body["argument_of_perihelion"];
+        sim_body.mean_anomaly = body["mean_anomaly"];
+        add_body_to_sim(sim, sim_body, i);
     }
 }
 

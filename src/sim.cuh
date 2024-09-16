@@ -28,11 +28,6 @@ double danby_burkardt(double mean_anomaly, double eccentricity) {
     return E;
 }
 
-// __device__
-// void burlisch_stoer() {
-
-//}
-
 __device__
 double changeover(double r_ij) {
     double r_crit = 0.001;
@@ -94,7 +89,6 @@ void cartesian_from_elements(
     current_velocities[idx] = make_double3(d11 * z3 + d21 * z4, d12 * z3 + d22 * z4, d13 * z3 + d23 * z4);
 }
 
-
 __device__ double3 cross(const double3& a, const double3& b) {
     return make_double3(
         a.y * b.z - a.z * b.y,
@@ -109,6 +103,20 @@ __device__ double magnitude(const double3& a) {
 
 __device__ double3 magnitude_squared(const double3& a) {
     return make_double3(a.x * a.x, a.y * a.y, a.z * a.z);
+}
+
+__device__ double stable_acos(double x) {
+    double alto = (double)(fabs(x) <= 1.00);
+    // so, basically this computes acos(x) if x within bounds
+    // otherwise it computes acos(+/- 1.00)
+    // x*alto evals to x when x inside bounds
+    // copysign(1.00, (1.00 - alto)) evals to +/- 1.00 when x outside bounds
+    return acos(x*alto + copysign((1.00 - alto), x));
+} 
+
+__device__ double stable_asin(double x) {
+    double alto = (double)(fabs(x) <= 1.00);
+    return asin(x*alto + copysign((1.00 - alto), x));
 }
 
 __device__
@@ -128,7 +136,7 @@ void elements_from_cartesian(
     double3 angular_momentum = cross(current_p, current_v);
     double epsilon = 1e-8;
     double h_sq = magnitude_squared(angular_momentum).x + magnitude_squared(angular_momentum).y + magnitude_squared(angular_momentum).z + epsilon;
-    double inclination = acos(angular_momentum.z / sqrt(h_sq));
+    double inclination = stable_acos(angular_momentum.z / sqrt(h_sq));
     // TODO: find way to do this without branching
     double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y == 0.0 ? 0.0 : -angular_momentum.y);
     double v_sq = magnitude_squared(current_v).x + magnitude_squared(current_v).y + magnitude_squared(current_v).z;
@@ -136,12 +144,13 @@ void elements_from_cartesian(
     double s = h_sq / G;
     double eccentricity = sqrt(1 + s * ((v_sq / G) - (2.00 / r)));
     double perihelion_distance = s / (1.00 + eccentricity);
-    double cos_e = (v_sq*r - G) / (eccentricity*G);
-    double E_anomaly = acos(cos_e);
-    // NOTE: replaced sin(E_anomaly) with (1 - cos_e * cos_e)
-    double M_anomaly = E_anomaly - eccentricity * (1 - cos_e * cos_e); 
+    
+    double cos_E_anomaly_denom = (eccentricity*G);
+    double cos_E_anomaly = (v_sq*r - G) / cos_E_anomaly_denom;
+    double E_anomaly = stable_acos(cos_E_anomaly);
+    double M_anomaly = E_anomaly - eccentricity * sin(E_anomaly);
     double cos_f = (s - r ) / (eccentricity * r);
-    double f = acos(cos_f);
+    double f = stable_acos(cos_f);
 
     double cos_i = cos(inclination);
     double to = -angular_momentum.x / angular_momentum.y;
@@ -207,7 +216,7 @@ void main_body_kinetic(double3* positions, double3* velocities, double* masses, 
     positions[idx].z += p.z * scaling_factor;
 }
 
-
+// this ensures that the sun is in a reference frame in which it is stationary and at the origin
 __device__
 void convert_to_democratic_heliocentric_coordinates(double3* positions, double3* velocities, double* masses) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
