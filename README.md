@@ -20,4 +20,3 @@ Run the binary using `./bin/mint` with a set of optional command line arguments:
 ## TODO
 
 - Read sim config from JSON instead of manually setting it
-- 

@@ -110,13 +110,19 @@ __device__ double stable_acos(double x) {
     // so, basically this computes acos(x) if x within bounds
     // otherwise it computes acos(+/- 1.00)
     // x*alto evals to x when x inside bounds
-    // copysign(1.00, (1.00 - alto)) evals to +/- 1.00 when x outside bounds
+    // copysign((1.00 - alto), x) evals to +/- 1.00 when x outside bounds
     return acos(x*alto + copysign((1.00 - alto), x));
 } 
 
 __device__ double stable_asin(double x) {
     double alto = (double)(fabs(x) <= 1.00);
     return asin(x*alto + copysign((1.00 - alto), x));
+}
+
+__device__ double stable_sqrt(double x) {
+    double gtz = (double)(x >= 0.00);
+    // eval to zero if x less than zero
+    return sqrt(x*gtz);
 }
 
 __device__
@@ -142,7 +148,7 @@ void elements_from_cartesian(
     double v_sq = magnitude_squared(current_v).x + magnitude_squared(current_v).y + magnitude_squared(current_v).z;
     double r = magnitude(current_p);
     double s = h_sq / G;
-    double eccentricity = sqrt(1 + s * ((v_sq / G) - (2.00 / r)));
+    double eccentricity = stable_sqrt(1 + s * ((v_sq / G) - (2.00 / r)));
     double perihelion_distance = s / (1.00 + eccentricity);
     
     double cos_E_anomaly_denom = (eccentricity*G);

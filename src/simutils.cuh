@@ -115,7 +115,6 @@ void pretty_print_positions(Sim* sim, double3* output_positions) {
 
 }
 
-
 __host__
 void sim_from_config_file(Sim* sim, std::string config_file, int num_timesteps) {
     /*
