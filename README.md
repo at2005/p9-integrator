@@ -12,7 +12,10 @@ To compile, run `make` in the root directory. This will create a binary in the `
 
 Run the binary on a GPU node using `./bin/mint` with a set of command line arguments:
 
-- `-c` sets the path to the config file
+- `-c` specifies the path to the JSON config file. For an example of what this should look like, check out examples/test.json
+
+### Optional:
+
 - `-i` prints simulation information
 - `-p` prints positions at each timestep for each body in the simulation
 - `-t` sets the number of timesteps to run the simulation for (default is 1)
