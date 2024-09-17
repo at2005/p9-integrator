@@ -1,4 +1,4 @@
-# A CUDA implementation of the Mercury N-body Integrator for use on High-Performance GPU Supercomputing Clusters
+# A CUDA implementation of the Mercury N-body Integrator for use on GPU Supercomputing Clusters
 
 Right now not trying to make this efficient, just trying to make it not blow up the solar system.
 

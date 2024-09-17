@@ -1,9 +1,8 @@
 #include "simutils.cuh"
 #include "sim.cuh"
 
-__host__
-int main(int argc, char** argv) {
-        // cli args
+__host__ int main(int argc, char** argv) {
+    // cli args
     bool print_sim_info = false;
     bool print_positions = false;
     std::string config_file;

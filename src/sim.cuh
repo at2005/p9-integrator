@@ -125,13 +125,13 @@ __device__ void cartesian_from_elements(
     double d22 = -z4 + z1*cos_i;
     double d23 = cos_a * sin_i;
    
-    double romes = sqrt(1 - eccentricity*eccentricity);
+    double romes = stable_sqrt(1 - eccentricity*eccentricity);
     double eccentric_anomaly = danby_burkardt(mean_anomaly, eccentricity);
     double sin_e, cos_e;
     sincos(eccentric_anomaly, &sin_e, &cos_e);
     z1 = semi_major_axis * (cos_e - eccentricity);
     z2 = semi_major_axis * romes * sin_e;
-    eccentric_anomaly = sqrt(1.00/semi_major_axis) / (1.0 - eccentricity*cos_e);
+    eccentric_anomaly = stable_sqrt(1.00/semi_major_axis) / (1.0 - eccentricity*cos_e);
     z3 = -sin_e * eccentric_anomaly;
     z4 = romes * cos_e * eccentric_anomaly;
     
