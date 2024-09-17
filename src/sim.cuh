@@ -3,6 +3,11 @@
 #define __SIM_CUH__
 #include "constants.cuh"
 
+/*
+This file contains the core numerical integration kernel and associated helper functions for my implementation of the Mercury N-body Integrator.
+Note: A key goal here is to minimise branching. However, it's not entirely escapable.
+*/
+
 __device__ double3 cross(const double3& a, const double3& b) {
     return make_double3(
         a.y * b.z - a.z * b.y,
@@ -157,7 +162,7 @@ __device__ void elements_from_cartesian(
     double h_sq = magnitude_squared(angular_momentum).x + magnitude_squared(angular_momentum).y + magnitude_squared(angular_momentum).z + epsilon;
     double inclination = stable_acos(angular_momentum.z / stable_sqrt(h_sq));
     // TODO: find way to do this without branching
-    double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y == 0.0 ? 0.0 : -angular_momentum.y);
+    double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y);
     double v_sq = magnitude_squared(current_v).x + magnitude_squared(current_v).y + magnitude_squared(current_v).z;
     double r = magnitude(current_p);
     double s = h_sq;
@@ -368,7 +373,7 @@ __device__ void convert_to_democratic_heliocentric_coordinates(double3* position
     
 }
 
-__global__ void mercurius_keplerian_solver(
+__global__ void mercurius_solver(
     double* vec_argument_of_perihelion_hbm,
     double* vec_mean_anomaly_hbm,
     double* vec_eccentricity_hbm,

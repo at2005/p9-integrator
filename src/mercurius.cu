@@ -47,7 +47,7 @@ __host__ int main(int argc, char** argv) {
         std::cout << "Launching kernel on " << sim.num_bodies << " threads" << std::endl;
     }
 
-    mercurius_keplerian_solver<<<1, sim.num_bodies>>>(
+    mercurius_solver<<<1, sim.num_bodies>>>(
         vec_argument_of_perihelion_device,
         vec_mean_anomaly_device,
         vec_eccentricity_device,
