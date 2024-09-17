@@ -1,0 +1,27 @@
+{
+    "bodies" :
+    [
+        {
+            "name" : "Earth",
+            "mass" : 3.00338e-06,
+            "semi_major_axis" : 1.00000011,
+            "eccentricity" : 0.01671022,
+            "inclination" : 8.72665e-07,
+            "longitude_of_ascending_node" : -11.26064,
+            "argument_of_perihelion" : 102.94719,
+            "mean_anomaly" : 100.46435
+        },
+
+        {
+            "name" : "Mars",
+            "mass" : 0.000954588,
+            "semi_major_axis" : 1.5,
+            "eccentricity" : 0.0934,
+            "inclination" : 0.0322537,
+            "longitude_of_ascending_node" : 0.865309,
+            "argument_of_perihelion" : 5.86502,
+            "mean_anomaly" : 0
+        }
+        
+    ]
+}

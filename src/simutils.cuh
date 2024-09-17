@@ -46,7 +46,7 @@ void initialize_std_sim(Sim* sim, int num_bodies, int num_timesteps) {
     sim->vec_eccentricity = (double*)malloc(num_bodies * sizeof(double));
     sim->vec_semi_major_axis = (double*)malloc(num_bodies * sizeof(double));
     sim->masses = (double*)malloc((num_bodies+1) * sizeof(double));
-    sim->body_names = (std::string*)malloc(num_bodies * sizeof(std::string));
+    sim->body_names = new std::string[num_bodies];
     
     // assume convention that main body mass is 1
     sim->masses[0] = 1.0;
@@ -83,7 +83,7 @@ void dump_sim(Sim* sim) {
 }
 
 __host__
-void args_parse(int argc, char** argv, bool* print_sim_info, bool* print_positions, int* num_timesteps) {
+void args_parse(int argc, char** argv, bool* print_sim_info, bool* print_positions, int* num_timesteps, std::string* config_file) {
     for(int i = 0; i < argc; i++) {
         // print sim info
         if(!strcmp(argv[i], "-i")) {
@@ -98,6 +98,11 @@ void args_parse(int argc, char** argv, bool* print_sim_info, bool* print_positio
         if(!strcmp(argv[i], "-t")) {
             *num_timesteps = atoi(argv[i+1]);
         }
+
+        if(!strcmp(argv[i], "-c")) {
+            *config_file = std::string(argv[i+1]);
+        }
+
     }
 }
 
@@ -123,15 +128,14 @@ void sim_from_config_file(Sim* sim, std::string config_file, int num_timesteps) 
     {
         "bodies": [
             {
-                "name": "Earth",
-                "mass": 5.97237e24,
-                "semi_major_axis": 1.00000011,
-                "eccentricity": 0.01671022,
-                "inclination": 0.00005 * M_PI / 180.0,
-                "longitude_of_ascending_node": -11.26064 * M_PI / 180.0,
-                "argument_of_perihelion": 102.94719 * M_PI / 180.0,
-                "mean_anomaly": 100.46435 * M_PI / 180.0,
-                "orbital_period": 365.256363004 * 24.0 * 60.0 * 60.0
+                "name" : "Earth",
+                "mass" : 3.00338e-06,
+                "semi_major_axis" : 1.00000011,
+                "eccentricity" : 0.01671022,
+                "inclination" : 8.72665e-07,
+                "longitude_of_ascending_node" : -11.26064,
+                "argument_of_perihelion" : 102.94719,
+                "mean_anomaly" : 100.46435
             },
 
             etc.
@@ -140,7 +144,7 @@ void sim_from_config_file(Sim* sim, std::string config_file, int num_timesteps) 
     std::ifstream config_file_stream(config_file);
     nlohmann::json config_file_json = nlohmann::json::parse(config_file_stream);
     auto bodies = config_file_json["bodies"];
-    int num_bodies = bodies.size();   
+    int num_bodies = bodies.size();
     initialize_std_sim(sim, num_bodies, num_timesteps);
     for(int i = 0; i < num_bodies; i++) {
         auto body = bodies[i];

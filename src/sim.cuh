@@ -3,6 +3,44 @@
 #define __SIM_CUH__
 #include "constants.cuh"
 
+__device__ double3 cross(const double3& a, const double3& b) {
+    return make_double3(
+        a.y * b.z - a.z * b.y,
+        a.z * b.x - a.x * b.z,
+        a.x * b.y - a.y * b.x
+    );
+}
+
+__device__ double stable_sqrt(double x) {
+    double gtz = (double)(x >= 0.00);
+    // eval to zero if x less than zero
+    return sqrt(x*gtz);
+}
+
+__device__ double magnitude(const double3& a) {
+    return stable_sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+}
+
+__device__ double3 magnitude_squared(const double3& a) {
+    return make_double3(a.x * a.x, a.y * a.y, a.z * a.z);
+}
+
+__device__ double stable_acos(double x) {
+    double alto = (double)(fabs(x) <= 1.00);
+    // so, basically this computes acos(x) if x within bounds
+    // otherwise it computes acos(+/- 1.00)
+    // x*alto evals to x when x inside bounds
+    // copysign((1.00 - alto), x) evals to +/- 1.00 when x outside bounds
+    return acos(x*alto + copysign((1.00 - alto), x));
+} 
+
+__device__ double stable_asin(double x) {
+    double alto = (double)(fabs(x) <= 1.00);
+    return asin(x*alto + copysign((1.00 - alto), x));
+}
+
+
+
 // solves kepler's equation for the eccentric anomaly E
 __device__
 double danby_burkardt(double mean_anomaly, double eccentricity) {
@@ -87,42 +125,6 @@ void cartesian_from_elements(
     
     current_positions[idx] = make_double3(d11 * z1 + d21 * z2, d12 * z1 + d22 * z2, d13 * z1 + d23 * z2);
     current_velocities[idx] = make_double3(d11 * z3 + d21 * z4, d12 * z3 + d22 * z4, d13 * z3 + d23 * z4);
-}
-
-__device__ double3 cross(const double3& a, const double3& b) {
-    return make_double3(
-        a.y * b.z - a.z * b.y,
-        a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x
-    );
-}
-
-__device__ double magnitude(const double3& a) {
-    return sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
-}
-
-__device__ double3 magnitude_squared(const double3& a) {
-    return make_double3(a.x * a.x, a.y * a.y, a.z * a.z);
-}
-
-__device__ double stable_acos(double x) {
-    double alto = (double)(fabs(x) <= 1.00);
-    // so, basically this computes acos(x) if x within bounds
-    // otherwise it computes acos(+/- 1.00)
-    // x*alto evals to x when x inside bounds
-    // copysign((1.00 - alto), x) evals to +/- 1.00 when x outside bounds
-    return acos(x*alto + copysign((1.00 - alto), x));
-} 
-
-__device__ double stable_asin(double x) {
-    double alto = (double)(fabs(x) <= 1.00);
-    return asin(x*alto + copysign((1.00 - alto), x));
-}
-
-__device__ double stable_sqrt(double x) {
-    double gtz = (double)(x >= 0.00);
-    // eval to zero if x less than zero
-    return sqrt(x*gtz);
 }
 
 __device__
@@ -221,6 +223,70 @@ void main_body_kinetic(double3* positions, double3* velocities, double* masses, 
     positions[idx].y += p.y * scaling_factor;
     positions[idx].z += p.z * scaling_factor;
 }
+
+
+__device__
+void update_velocities(double3* positions, double3* velocities, double* masses, double dt) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    // the body interaction kick updates velocities based on the masses of all minor bodies
+    body_interaction_kick(positions, velocities, masses, dt);
+    // now for the main body:
+    // update acceleration due to main body
+    // a = - G * M / r^3 * r, which in this case simplifies to 1/(r^3) * r_vec
+    double3 z_1 = positions[idx];
+    double r = magnitude(z_1);
+    double3 r_vec = make_double3(z_1.x / pow(r, 3), z_1.y / pow(r, 3), z_1.z / pow(r, 3));
+    // negative bc directed inwards
+    velocities[idx].x -= r_vec.x * dt;
+    velocities[idx].y -= r_vec.y * dt;
+    velocities[idx].z -= r_vec.z * dt;
+}
+
+__device__
+void modified_midpoint(double3* positions, double3* velocities, double* masses, double dt, int N) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    double3 v = velocities[idx];
+    double subdelta = dt / N;
+    
+    // euler step
+    // this sets up z_1 and z_0
+    // so we can use z_0 to calc z_2 and use z_1 for z_3
+    double3 z_1 = positions[idx];
+    z_1.x += v.x * subdelta;
+    z_1.y += v.y * subdelta;
+    z_1.z += v.z * subdelta;
+    double double_step = 2 * subdelta;
+    double3 z_0 = positions[idx];
+    positions[idx] = z_1;
+    update_velocities(positions, velocities, masses, subdelta);
+
+    // so now, we need to calculate z_(m+1) using z_(m-1)
+    // we can store z_(m-1) in z_0 and z_(m+1) in z_1
+    // we already have z_0 and z_1 so we can use them for computing z_2/3
+    
+    for(int i = 1; i < N; i++) {
+        double3 temp;
+        // here we are computing the new (m+1) position
+        temp.x = z_0.x + velocities[idx].x * double_step;
+        temp.y = z_0.y + velocities[idx].y * double_step;
+        temp.z = z_0.z + velocities[idx].z * double_step;
+        // so we set this position to be the new z_0
+        z_0 = z_1;
+        z_1 = temp;
+        positions[idx] = z_1;
+        // update velocities
+        update_velocities(positions, velocities, masses, subdelta);
+    }
+
+    // final little bit
+    double3 out;
+    out.x = 0.5 * (z_1.x + z_0.x + v.x * subdelta);
+    out.y = 0.5 * (z_1.y + z_0.y + v.y * subdelta);
+    out.z = 0.5 * (z_1.z + z_0.z + v.z * subdelta);
+    positions[idx] = out;
+}
+
+
 
 // this ensures that the sun is in a reference frame in which it is stationary and at the origin
 __device__

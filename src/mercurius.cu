@@ -6,40 +6,17 @@ int main(int argc, char** argv) {
         // cli args
     bool print_sim_info = false;
     bool print_positions = false;
+    std::string config_file;
     // default is one orbital period (of Earth)
     int NUM_TIMESTEPS = 1;
-    args_parse(argc, argv, &print_sim_info, &print_positions, &NUM_TIMESTEPS);
+    args_parse(argc, argv, &print_sim_info, &print_positions, &NUM_TIMESTEPS, &config_file);
 
     Sim sim;
-    initialize_std_sim(&sim, NUM_BODIES, NUM_TIMESTEPS);
+    // initialize_std_sim(&sim, NUM_BODIES, NUM_TIMESTEPS);
+    sim_from_config_file(&sim, config_file, NUM_TIMESTEPS);
+    
+    // set integration timestep
     double dt = 0.08;
-
-    // testing 3-body system
-    Body Earth;
-    Earth.inclination = 0.00005 * M_PI / 180.0;
-    Earth.longitude_of_ascending_node = -11.26064 * M_PI / 180.0;
-    Earth.argument_of_perihelion = 102.94719 * M_PI / 180.0;
-    Earth.mean_anomaly = 100.46435 * M_PI / 180.0;
-    Earth.eccentricity = 0.01671022;
-    Earth.semi_major_axis = 1.00000011;
-    Earth.mass = 5.97237e24 / 1.98855e30;
-    Earth.name = "Earth";
-
-    // add earth to simulation
-    add_body_to_sim(&sim, Earth, 0);
-
-    Body Mars;
-    Mars.inclination = 1.848 * M_PI / 180.0;
-    Mars.longitude_of_ascending_node = 49.57854 * M_PI / 180.0;
-    Mars.argument_of_perihelion = 336.04084 * M_PI / 180.0;
-    Mars.mean_anomaly = 0;
-    Mars.eccentricity = 0.0934;
-    Mars.semi_major_axis = 1.5;
-    Mars.mass = 0.000954588;
-    Mars.name = "Mars";
-
-    // yay now we add mars to the simulation
-    add_body_to_sim(&sim, Mars, 1);
 
     // this is bc we need to allocate memory on the device (on HBM – global memory, copy to SRAM later)
     double *vec_longitude_of_ascending_node_device, *vec_inclination_device, *vec_argument_of_perihelion_device, 
@@ -98,6 +75,7 @@ int main(int argc, char** argv) {
     cudaFree(vec_semi_major_axis_device);
     cudaFree(masses_device);
     cudaFree(output_positions_device);
-    cudaDeviceReset();    
+    cudaDeviceReset();   
+    
 }
  
