@@ -131,7 +131,7 @@ __device__ void cartesian_from_elements(
     sincos(eccentric_anomaly, &sin_e, &cos_e);
     z1 = semi_major_axis * (cos_e - eccentricity);
     z2 = semi_major_axis * romes * sin_e;
-    eccentric_anomaly = sqrt(G/semi_major_axis) / (1.0 - eccentricity*cos_e);
+    eccentric_anomaly = sqrt(1.00/semi_major_axis) / (1.0 - eccentricity*cos_e);
     z3 = -sin_e * eccentric_anomaly;
     z4 = romes * cos_e * eccentric_anomaly;
     
@@ -160,12 +160,12 @@ __device__ void elements_from_cartesian(
     double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y == 0.0 ? 0.0 : -angular_momentum.y);
     double v_sq = magnitude_squared(current_v).x + magnitude_squared(current_v).y + magnitude_squared(current_v).z;
     double r = magnitude(current_p);
-    double s = h_sq / G;
-    double eccentricity = stable_sqrt(1 + s * ((v_sq / G) - (2.00 / r)));
+    double s = h_sq;
+    double eccentricity = stable_sqrt(1 + s * (v_sq - (2.00 / r)));
     double perihelion_distance = s / (1.00 + eccentricity);
     
-    double cos_E_anomaly_denom = (eccentricity*G);
-    double cos_E_anomaly = (v_sq*r - G) / cos_E_anomaly_denom;
+    double cos_E_anomaly_denom = eccentricity;
+    double cos_E_anomaly = (v_sq*r - 1) / cos_E_anomaly_denom;
     double E_anomaly = stable_acos(cos_E_anomaly);
     double M_anomaly = E_anomaly - eccentricity * sin(E_anomaly);
     double cos_f = (s - r ) / (eccentricity * r);
@@ -204,7 +204,7 @@ __device__ void body_interaction_kick(double3* positions, double3* velocities, d
         double epsilon = 1e-8;
         double r = sqrt(dist_x * dist_x + dist_y * dist_y + dist_z * dist_z);
         // // magnitude of acceleration = mass_of_other_body * G / |r|^3
-        double weighted_acceleration = changeover(positions, velocities, masses, r, i, idx, dt) * masses[i+1] * G / pow(r + epsilon, 3);
+        double weighted_acceleration = changeover(positions, velocities, masses, r, i, idx, dt) * masses[i+1] / pow(r + epsilon, 3);
         // // accumulate total acceleration due to all bodies, except self
         acc.x += weighted_acceleration * dist_x;
         acc.y += weighted_acceleration * dist_y;
