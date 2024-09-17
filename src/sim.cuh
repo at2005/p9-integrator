@@ -479,7 +479,9 @@ __global__ void mercurius_solver(
 
         // if i am undergoing a close encounter with anyone
         // use bulirsch-stoer aka richardson extrapolation w/ mod midpoint 
-        if(close_encounter_p(positions, velocities, masses, dt)) {}
+        if(close_encounter_p(positions, velocities, masses, dt)) {
+            richardson_extrapolation(positions, velocities, masses, dt);
+        }
         else {
             elements_from_cartesian(
                 positions,
