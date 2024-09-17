@@ -11,7 +11,6 @@ __host__ int main(int argc, char** argv) {
     args_parse(argc, argv, &print_sim_info, &print_positions, &NUM_TIMESTEPS, &config_file);
 
     Sim sim;
-    // initialize_std_sim(&sim, NUM_BODIES, NUM_TIMESTEPS);
     sim_from_config_file(&sim, config_file, NUM_TIMESTEPS);
     
     // set integration timestep to the one BB21 use
@@ -39,7 +38,6 @@ __host__ int main(int argc, char** argv) {
     cudaMemcpy(vec_eccentricity_device, sim.vec_eccentricity, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(vec_semi_major_axis_device, sim.vec_semi_major_axis, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(masses_device, sim.masses, (sim.num_bodies+1) * sizeof(double), cudaMemcpyHostToDevice);
-
 
     // print sim information 
     if(print_sim_info) {

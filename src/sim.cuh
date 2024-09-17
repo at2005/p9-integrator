@@ -26,8 +26,8 @@ __device__ double magnitude(const double3& a) {
     return stable_sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
 }
 
-__device__ double3 magnitude_squared(const double3& a) {
-    return make_double3(a.x * a.x, a.y * a.y, a.z * a.z);
+__device__ double magnitude_squared(const double3& a) {
+    return a.x * a.x + a.y * a.y + a.z * a.z;
 }
 
 __device__ double stable_acos(double x) {
@@ -159,11 +159,11 @@ __device__ void elements_from_cartesian(
     double3 current_v = current_velocities[idx];
     double3 angular_momentum = cross(current_p, current_v);
     double epsilon = 1e-8;
-    double h_sq = magnitude_squared(angular_momentum).x + magnitude_squared(angular_momentum).y + magnitude_squared(angular_momentum).z + epsilon;
+    double h_sq = magnitude_squared(angular_momentum) + epsilon;
     double inclination = stable_acos(angular_momentum.z / stable_sqrt(h_sq));
     // TODO: find way to do this without branching
     double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y);
-    double v_sq = magnitude_squared(current_v).x + magnitude_squared(current_v).y + magnitude_squared(current_v).z;
+    double v_sq = magnitude_squared(current_v); 
     double r = magnitude(current_p);
     double s = h_sq;
     double eccentricity = stable_sqrt(1 + s * (v_sq - (2.00 / r)));
@@ -258,7 +258,12 @@ __device__ void update_velocities(double3* positions, double3* velocities, doubl
     velocities[idx].z -= r_vec.z * dt;
 }
 
-__device__ double3 modified_midpoint(double3* positions, double3* velocities, double* masses, double dt, int N) {
+struct PosVel {
+    double3 pos;
+    double3 vel;
+};
+
+__device__ PosVel modified_midpoint(double3* positions, double3* velocities, double* masses, double dt, int N) {
     /*
     returns an updated position based on the modified midpoint method.
     */
@@ -303,26 +308,34 @@ __device__ double3 modified_midpoint(double3* positions, double3* velocities, do
     out.x = 0.5 * (z_1.x + z_0.x + velocities[idx].x * subdelta);
     out.y = 0.5 * (z_1.y + z_0.y + velocities[idx].y * subdelta);
     out.z = 0.5 * (z_1.z + z_0.z + velocities[idx].z * subdelta);
+    PosVel res;
+    // store final positions and velocities
+    res.pos = out;
+    res.vel = velocities[idx];
     // restore velocities and positions
     velocities[idx] = v;
     positions[idx] = x;
-    return out; 
+    return res;
 }
 
-__device__ bool is_converged(double3 a_1, double3 a_0) {
-    double tolerance = 1e-8;
-    double3 diff;
-    diff.x = a_1.x - a_0.x;
-    diff.y = a_1.y - a_0.y;
-    diff.z = a_1.z - a_0.z;
-    return (diff.x * diff.x + diff.y * diff.y + diff.z * diff.z) < tolerance;
+__device__ bool is_converged(PosVel a_1, PosVel a_0) {
+    PosVel diff;
+    diff.pos.x = a_1.pos.x - a_0.pos.x;
+    diff.pos.y = a_1.pos.y - a_0.pos.y;
+    diff.pos.z = a_1.pos.z - a_0.pos.z;
+    diff.vel.x = a_1.vel.x - a_0.vel.x;
+    diff.vel.y = a_1.vel.y - a_0.vel.y;
+    diff.vel.z = a_1.vel.z - a_0.vel.z;
+    double mag_vel = magnitude_squared(diff.vel);
+    double mag_pos = magnitude_squared(diff.pos);
+    return (mag_vel + mag_pos) < BULIRSCH_STOER_TOLERANCE;
 }
 
-__device__ double3 richardson_extrapolation(double3* positions, double3* velocities, double* masses, double dt) {
+__device__ void richardson_extrapolation(double3* positions, double3* velocities, double* masses, double dt) {
     const int MAX_ROWS = 4;
     int N = 1;
-    double3 buffer[MAX_ROWS][MAX_ROWS];
-    double3 res;
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    PosVel buffer[MAX_ROWS][MAX_ROWS];
     // for our first approx, we use the OG dt
     buffer[0][0] = modified_midpoint(positions, velocities, masses, dt, N);
     for(int i = 1;  i < MAX_ROWS; i++) {
@@ -330,25 +343,35 @@ __device__ double3 richardson_extrapolation(double3* positions, double3* velocit
         buffer[i][0] = modified_midpoint(positions, velocities, masses, dt, N);
         for(int j = 1; j <= i; j++) {
             double pow2 = pow(2, j);
-            buffer[i][j].x = pow2 * buffer[i][j-1].x - buffer[i-1][j-1].x;
-            buffer[i][j].y = pow2 * buffer[i][j-1].y - buffer[i-1][j-1].y;
-            buffer[i][j].z = pow2 * buffer[i][j-1].z - buffer[i-1][j-1].z;
-            pow2 -= 1;
-            buffer[i][j].x /= pow2;
-            buffer[i][j].y *= pow2;
-            buffer[i][j].z *= pow2;
-        }
+            
+            // for positions
+            buffer[i][j].pos.x = pow2 * buffer[i][j-1].pos.x - buffer[i-1][j-1].pos.x;
+            buffer[i][j].pos.y = pow2 * buffer[i][j-1].pos.y - buffer[i-1][j-1].pos.y;
+            buffer[i][j].pos.z = pow2 * buffer[i][j-1].pos.z - buffer[i-1][j-1].pos.z;
 
-        res = buffer[i][i];
+            // for velocities
+            buffer[i][j].vel.x = pow2 * buffer[i][j-1].vel.x - buffer[i-1][j-1].vel.x;
+            buffer[i][j].vel.y = pow2 * buffer[i][j-1].vel.y - buffer[i-1][j-1].vel.y;
+            buffer[i][j].vel.z = pow2 * buffer[i][j-1].vel.z - buffer[i-1][j-1].vel.z;
+
+            pow2 -= 1;
+
+            buffer[i][j].pos.x /= pow2;
+            buffer[i][j].pos.y /= pow2;
+            buffer[i][j].pos.z /= pow2;
+
+            buffer[i][j].vel.x /= pow2;
+            buffer[i][j].vel.y /= pow2;
+            buffer[i][j].vel.z /= pow2;
+        }
 
         if(is_converged(buffer[i][i], buffer[i-1][i-1])) {            
-            return res;
+            positions[idx] = buffer[i][i].pos;
+            velocities[idx] = buffer[i][i].vel;
+            return;
         }
     }
-
-    return res;
 }
-
 
 // this ensures that the sun is in a reference frame in which it is stationary and at the origin
 __device__ void convert_to_democratic_heliocentric_coordinates(double3* positions, double3* velocities, double* masses) {
@@ -372,6 +395,25 @@ __device__ void convert_to_democratic_heliocentric_coordinates(double3* position
     velocities[idx].z -= mass_weighted_v.z;
     
 }
+
+__device__ bool close_encounter_p(double3* positions, double3* velocities, double* masses, double dt) {
+    // get indices of bodies i am undergoing close encounters with
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    for(int i = 0; i < blockDim.x; i++) {
+        if(i == idx) continue;
+        double3 r_ij;
+        r_ij.x = positions[i].x - positions[idx].x;
+        r_ij.y = positions[i].y - positions[idx].y;
+        r_ij.z = positions[i].z - positions[idx].z;
+        double r_ij_mag = magnitude(r_ij);
+        double r_crit = fetch_r_crit(positions, velocities, masses, idx, i, dt);
+        if (r_ij_mag < r_crit) {
+            return true;
+        }
+    }
+    return false;
+}
+
 
 __global__ void mercurius_solver(
     double* vec_argument_of_perihelion_hbm,
@@ -434,16 +476,22 @@ __global__ void mercurius_solver(
         double semi_major_axis = vec_semi_major_axis[idx];
         double n = 1.00 / (semi_major_axis * semi_major_axis * semi_major_axis); 
         __syncthreads(); 
-        elements_from_cartesian(
-            positions,
-            velocities,
-            vec_inclination,
-            vec_longitude_of_ascending_node,
-            vec_argument_of_perihelion,
-            vec_mean_anomaly,
-            vec_eccentricity,
-            vec_semi_major_axis
-        );
+
+        // if i am undergoing a close encounter with anyone
+        // use bulirsch-stoer aka richardson extrapolation w/ mod midpoint 
+        if(close_encounter_p(positions, velocities, masses, dt)) {}
+        else {
+            elements_from_cartesian(
+                positions,
+                velocities,
+                vec_inclination,
+                vec_longitude_of_ascending_node,
+                vec_argument_of_perihelion,
+                vec_mean_anomaly,
+                vec_eccentricity,
+                vec_semi_major_axis
+            );
+        }
         __syncthreads();
         // // advance mean anomaly, this is essentially advancing to the next timestep
         vec_mean_anomaly[idx] = fmod(n * dt + vec_mean_anomaly[idx], TWOPI);
