@@ -2,7 +2,7 @@
 
 Right now not trying to make this efficient, just trying to make it not blow up the solar system.
 
-Currently in-progress: Richardson extrapolation 
+Currently in-progress: Merging Bulirsch-Stoer into main integration kernel
 
 ## Compiling
 
