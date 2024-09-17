@@ -308,30 +308,29 @@ __device__ bool is_converged(double3 a_1, double3 a_0) {
 
 __device__
 double3 richardson_extrapolation(double3* positions, double3* velocities, double* masses, double dt) {
-    const int MAX_ROWS = 6;
+    const int MAX_ROWS = 4;
     int N = 1;
     double3 buffer[MAX_ROWS][MAX_ROWS];
     double3 res;
     // for our first approx, we use the OG dt
     buffer[0][0] = modified_midpoint(positions, velocities, masses, dt, N);
-    for(int i = 0;  i < MAX_ROWS; i++) {
-        N = pow(2, i + 1);
-        buffer[i + 1][0] = modified_midpoint(positions, velocities, masses, dt, N);
-        for(int j = 0; j <= i; j++) {
-            buffer[i+1][j+1].x = buffer[i+1][j].x - buffer[i][j].x;
-            buffer[i+1][j+1].y = buffer[i+1][j].y - buffer[i][j].y;
-            buffer[i+1][j+1].z = buffer[i+1][j].z - buffer[i][j].z;
-
-            double factor = pow(4, j+1) / (pow(4, j+1) - 1);
-            buffer[i+1][j+1].x *= factor;
-            buffer[i+1][j+1].y *= factor;
-            buffer[i+1][j+1].z *= factor;
-
+    for(int i = 1;  i < MAX_ROWS; i++) {
+        N = pow(2, i);
+        buffer[i][0] = modified_midpoint(positions, velocities, masses, dt, N);
+        for(int j = 1; j <= i; j++) {
+            double pow2 = pow(2, j);
+            buffer[i][j].x = pow2 * buffer[i][j-1].x - buffer[i-1][j-1].x;
+            buffer[i][j].y = pow2 * buffer[i][j-1].y - buffer[i-1][j-1].y;
+            buffer[i][j].z = pow2 * buffer[i][j-1].z - buffer[i-1][j-1].z;
+            pow2 -= 1;
+            buffer[i][j].x /= pow2;
+            buffer[i][j].y *= pow2;
+            buffer[i][j].z *= pow2;
         }
 
-        res = buffer[i+1][i+1];
+        res = buffer[i][i];
 
-        if(is_converged(buffer[i+1][i+1], buffer[i][i])) {            
+        if(is_converged(buffer[i][i], buffer[i-1][i-1])) {            
             return res;
         }
     }
