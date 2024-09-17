@@ -195,7 +195,7 @@ __device__ void elements_from_cartesian(
     vec_semi_major_axis[idx] = semi_major_axis;
 }
 
-__device__ void body_interaction_kick(double3* positions, double3* velocities, double* masses, double dt) {
+__device__ void body_interaction_kick(double3* positions, double3* velocities, double* masses, double dt, bool possible_close_encounter=false) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     double3 acc = make_double3(0.0, 0.0, 0.0);
     double dist_x, dist_y, dist_z = 0.0;
@@ -209,7 +209,16 @@ __device__ void body_interaction_kick(double3* positions, double3* velocities, d
         double epsilon = 1e-8;
         double r = stable_sqrt(dist_x * dist_x + dist_y * dist_y + dist_z * dist_z);
         // // magnitude of acceleration = mass_of_other_body * G / |r|^3
-        double weighted_acceleration = changeover(positions, velocities, masses, r, i, idx, dt) * masses[i+1] / pow(r + epsilon, 3);
+        double changeover_weight = changeover(positions, velocities, masses, r, i, idx, dt);
+        if(possible_close_encounter) {
+            double r_crit = fetch_r_crit(positions, velocities, masses, idx, i, dt);
+            if(r < r_crit) {
+                // 1 - K weighting if close encounter
+                changeover_weight = 1 - changeover_weight;
+            }
+        }
+
+        double weighted_acceleration = changeover_weight * masses[i+1] / pow(r + epsilon, 3);
         // // accumulate total acceleration due to all bodies, except self
         acc.x += weighted_acceleration * dist_x;
         acc.y += weighted_acceleration * dist_y;
@@ -245,7 +254,7 @@ __device__ void update_velocities(double3* positions, double3* velocities, doubl
     */
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     // the body interaction kick updates velocities based on the masses of all minor bodies
-    body_interaction_kick(positions, velocities, masses, dt);
+    body_interaction_kick(positions, velocities, masses, dt, true);
     // now for the main body:
     // update acceleration due to main body
     // a = - G * M / r^3 * r, which in this case simplifies to 1/(r^3) * r_vec
