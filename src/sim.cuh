@@ -155,7 +155,7 @@ __device__ void elements_from_cartesian(
     double3 angular_momentum = cross(current_p, current_v);
     double epsilon = 1e-8;
     double h_sq = magnitude_squared(angular_momentum).x + magnitude_squared(angular_momentum).y + magnitude_squared(angular_momentum).z + epsilon;
-    double inclination = stable_acos(angular_momentum.z / sqrt(h_sq));
+    double inclination = stable_acos(angular_momentum.z / stable_sqrt(h_sq));
     // TODO: find way to do this without branching
     double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y == 0.0 ? 0.0 : -angular_momentum.y);
     double v_sq = magnitude_squared(current_v).x + magnitude_squared(current_v).y + magnitude_squared(current_v).z;
@@ -202,7 +202,7 @@ __device__ void body_interaction_kick(double3* positions, double3* velocities, d
         dist_y = positions[i].y - positions[idx].y;
         dist_z = positions[i].z - positions[idx].z;
         double epsilon = 1e-8;
-        double r = sqrt(dist_x * dist_x + dist_y * dist_y + dist_z * dist_z);
+        double r = stable_sqrt(dist_x * dist_x + dist_y * dist_y + dist_z * dist_z);
         // // magnitude of acceleration = mass_of_other_body * G / |r|^3
         double weighted_acceleration = changeover(positions, velocities, masses, r, i, idx, dt) * masses[i+1] / pow(r + epsilon, 3);
         // // accumulate total acceleration due to all bodies, except self
