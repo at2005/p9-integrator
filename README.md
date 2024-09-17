@@ -6,7 +6,7 @@ Currently in-progress: Richardson extrapolation
 
 ## Compiling
 
-To compile, run `make` in the root directory. This will create a binary in the `bin` directory. Currently only tested on H100s, but should work on other GPUs by specifying an arch flag in the Makefile. Ensure that the latest version of CUDA is installed.
+To compile, run `make` in the root directory. This will create a binary in the `bin` directory. Currently only tested on H100s, but should work on other GPUs – modify the Makefile to specify an arch flag. Ensure that the latest version of CUDA is installed.
 
 ## Running
 

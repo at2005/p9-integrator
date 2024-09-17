@@ -227,6 +227,9 @@ void main_body_kinetic(double3* positions, double3* velocities, double* masses, 
 
 __device__
 void update_velocities(double3* positions, double3* velocities, double* masses, double dt) {
+    /*
+    updates the velocities of all bodies based on the mass distribution of all bodies (incl the sun)
+    */
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     // the body interaction kick updates velocities based on the masses of all minor bodies
     body_interaction_kick(positions, velocities, masses, dt);
@@ -243,9 +246,14 @@ void update_velocities(double3* positions, double3* velocities, double* masses, 
 }
 
 __device__
-void modified_midpoint(double3* positions, double3* velocities, double* masses, double dt, int N) {
+double3 modified_midpoint(double3* positions, double3* velocities, double* masses, double dt, int N) {
+    /*
+    returns an updated position based on the modified midpoint method.
+    */
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    // initial velocity, we need this for later
     double3 v = velocities[idx];
+    double3 x = positions[idx];
     double subdelta = dt / N;
     
     // euler step
@@ -280,12 +288,56 @@ void modified_midpoint(double3* positions, double3* velocities, double* masses, 
 
     // final little bit
     double3 out;
-    out.x = 0.5 * (z_1.x + z_0.x + v.x * subdelta);
-    out.y = 0.5 * (z_1.y + z_0.y + v.y * subdelta);
-    out.z = 0.5 * (z_1.z + z_0.z + v.z * subdelta);
-    positions[idx] = out;
+    out.x = 0.5 * (z_1.x + z_0.x + velocities[idx].x * subdelta);
+    out.y = 0.5 * (z_1.y + z_0.y + velocities[idx].y * subdelta);
+    out.z = 0.5 * (z_1.z + z_0.z + velocities[idx].z * subdelta);
+    // restore velocities and positions
+    velocities[idx] = v;
+    positions[idx] = x;
+    return out; 
 }
 
+__device__ bool is_converged(double3 a_1, double3 a_0) {
+    double tolerance = 1e-8;
+    double3 diff;
+    diff.x = a_1.x - a_0.x;
+    diff.y = a_1.y - a_0.y;
+    diff.z = a_1.z - a_0.z;
+    return (diff.x * diff.x + diff.y * diff.y + diff.z * diff.z) < tolerance;
+}
+
+__device__
+double3 richardson_extrapolation(double3* positions, double3* velocities, double* masses, double dt) {
+    const int MAX_ROWS = 6;
+    int N = 1;
+    double3 buffer[MAX_ROWS][MAX_ROWS];
+    double3 res;
+    // for our first approx, we use the OG dt
+    buffer[0][0] = modified_midpoint(positions, velocities, masses, dt, N);
+    for(int i = 0;  i < MAX_ROWS; i++) {
+        N = pow(2, i + 1);
+        buffer[i + 1][0] = modified_midpoint(positions, velocities, masses, dt, N);
+        for(int j = 0; j <= i; j++) {
+            buffer[i+1][j+1].x = buffer[i+1][j].x - buffer[i][j].x;
+            buffer[i+1][j+1].y = buffer[i+1][j].y - buffer[i][j].y;
+            buffer[i+1][j+1].z = buffer[i+1][j].z - buffer[i][j].z;
+
+            double factor = pow(4, j+1) / (pow(4, j+1) - 1);
+            buffer[i+1][j+1].x *= factor;
+            buffer[i+1][j+1].y *= factor;
+            buffer[i+1][j+1].z *= factor;
+
+        }
+
+        res = buffer[i+1][i+1];
+
+        if(is_converged(buffer[i+1][i+1], buffer[i][i])) {            
+            return res;
+        }
+    }
+
+    return res;
+}
 
 
 // this ensures that the sun is in a reference frame in which it is stationary and at the origin
