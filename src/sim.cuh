@@ -9,10 +9,7 @@ functions for my implementation of the Mercury N-body Integrator. Note: A key
 goal here is to minimise branching. However, it's not entirely escapable.
 */
 
-__device__ double3 cross(const double3 &a, const double3 &b) {
-  return make_double3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z,
-                      a.x * b.y - a.y * b.x);
-}
+__device__ double3 cross(const double3 &a, const double3 &b) { return make_double3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x); }
 
 __device__ double stable_sqrt(double x) {
   double gtz = (double)(x >= 0.00);
@@ -20,13 +17,9 @@ __device__ double stable_sqrt(double x) {
   return sqrt(x * gtz);
 }
 
-__device__ double magnitude(const double3 &a) {
-  return stable_sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
-}
+__device__ double magnitude(const double3 &a) { return stable_sqrt(a.x * a.x + a.y * a.y + a.z * a.z); }
 
-__device__ double magnitude_squared(const double3 &a) {
-  return a.x * a.x + a.y * a.y + a.z * a.z;
-}
+__device__ double magnitude_squared(const double3 &a) { return a.x * a.x + a.y * a.y + a.z * a.z; }
 
 __device__ double stable_acos(double x) {
   double alto = (double)(fabs(x) <= 1.00);
@@ -60,16 +53,14 @@ __device__ double danby_burkardt(double mean_anomaly, double eccentricity) {
     // quartic convergence
     dE = -f / ((f_prime + dE * e_sin / 2.00) + (dE * dE * e_cos / 6.00));
     // quintic convergence
-    dE = -f / ((f_prime + dE * e_sin / 2.00) + (dE * dE * e_cos / 6.00) -
-               (dE * dE * dE * e_sin / 24.00));
+    dE = -f / ((f_prime + dE * e_sin / 2.00) + (dE * dE * e_cos / 6.00) - (dE * dE * dE * e_sin / 24.00));
     E += dE;
   }
 
   return E;
 }
 
-__device__ double fetch_r_crit(double3 *positions, double3 *velocities,
-                               double *masses, int idx1, int idx2, double dt) {
+__device__ double fetch_r_crit(double3 *positions, double3 *velocities, double *masses, int idx1, int idx2, double dt) {
   // anywhere between 3-10
   double n1 = 6.50;
   // anywhere between 0.3-2.0
@@ -78,15 +69,12 @@ __device__ double fetch_r_crit(double3 *positions, double3 *velocities,
   double r2 = magnitude(positions[idx2]);
   double v1 = magnitude(velocities[idx1]);
   double v2 = magnitude(velocities[idx2]);
-  double mutual_hill_radius =
-      cbrt(masses[idx1] + masses[idx2] / 3.00) * (r1 + r2) / 2.00;
+  double mutual_hill_radius = cbrt(masses[idx1] + masses[idx2] / 3.00) * (r1 + r2) / 2.00;
   double vmax = max(v1, v2);
   return max(n1 * mutual_hill_radius, n2 * vmax * dt);
 }
 
-__device__ double changeover(double3 *positions, double3 *velocities,
-                             double *masses, double r_ij, int idx1, int idx2,
-                             double dt) {
+__device__ double changeover(double3 *positions, double3 *velocities, double *masses, double r_ij, int idx1, int idx2, double dt) {
   double r_crit = fetch_r_crit(positions, velocities, masses, idx1, idx2, dt);
   double y = (r_ij - 0.1 * r_crit) / (0.9 * r_crit);
   double K = y * y / (2 * y * y - 2 * y + 1);
@@ -97,11 +85,7 @@ __device__ double changeover(double3 *positions, double3 *velocities,
   return K * gtz * valid + gto;
 }
 
-__device__ void cartesian_from_elements(
-    double *vec_inclination, double *vec_longitude_of_ascending_node,
-    double *vec_argument_of_perihelion, double *vec_mean_anomaly,
-    double *vec_eccentricity, double *vec_semi_major_axis,
-    double3 *current_positions, double3 *current_velocities) {
+__device__ void cartesian_from_elements(double *vec_inclination, double *vec_longitude_of_ascending_node, double *vec_argument_of_perihelion, double *vec_mean_anomaly, double *vec_eccentricity, double *vec_semi_major_axis, double3 *current_positions, double3 *current_velocities) {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   double inclination = vec_inclination[idx];
   double longitude_of_ascending_node = vec_longitude_of_ascending_node[idx];
@@ -132,22 +116,15 @@ __device__ void cartesian_from_elements(
   sincos(eccentric_anomaly, &sin_e, &cos_e);
   z1 = semi_major_axis * (cos_e - eccentricity);
   z2 = semi_major_axis * romes * sin_e;
-  eccentric_anomaly =
-      stable_sqrt(1.00 / semi_major_axis) / (1.0 - eccentricity * cos_e);
+  eccentric_anomaly = stable_sqrt(1.00 / semi_major_axis) / (1.0 - eccentricity * cos_e);
   z3 = -sin_e * eccentric_anomaly;
   z4 = romes * cos_e * eccentric_anomaly;
 
-  current_positions[idx] = make_double3(
-      d11 * z1 + d21 * z2, d12 * z1 + d22 * z2, d13 * z1 + d23 * z2);
-  current_velocities[idx] = make_double3(
-      d11 * z3 + d21 * z4, d12 * z3 + d22 * z4, d13 * z3 + d23 * z4);
+  current_positions[idx] = make_double3(d11 * z1 + d21 * z2, d12 * z1 + d22 * z2, d13 * z1 + d23 * z2);
+  current_velocities[idx] = make_double3(d11 * z3 + d21 * z4, d12 * z3 + d22 * z4, d13 * z3 + d23 * z4);
 }
 
-__device__ void elements_from_cartesian(
-    double3 *current_positions, double3 *current_velocities,
-    double *vec_inclination, double *vec_longitude_of_ascending_node,
-    double *vec_argument_of_perihelion, double *vec_mean_anomaly,
-    double *vec_eccentricity, double *vec_semi_major_axis) {
+__device__ void elements_from_cartesian(double3 *current_positions, double3 *current_velocities, double *vec_inclination, double *vec_longitude_of_ascending_node, double *vec_argument_of_perihelion, double *vec_mean_anomaly, double *vec_eccentricity, double *vec_semi_major_axis) {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   double3 current_p = current_positions[idx];
   double3 current_v = current_velocities[idx];
@@ -156,8 +133,7 @@ __device__ void elements_from_cartesian(
   double h_sq = magnitude_squared(angular_momentum) + epsilon;
   double inclination = stable_acos(angular_momentum.z / stable_sqrt(h_sq));
   // TODO: find way to do this without branching
-  double longitude_of_ascending_node =
-      atan2(angular_momentum.x, -angular_momentum.y);
+  double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y);
   double v_sq = magnitude_squared(current_v);
   double r = magnitude(current_p);
   double s = h_sq;
@@ -175,9 +151,7 @@ __device__ void elements_from_cartesian(
   double to = -angular_momentum.x / angular_momentum.y;
   double temp = (1.00 - cos_i) * to;
   double temp2 = to * to;
-  double true_longitude =
-      atan2((current_p.y * (1.00 + temp2 * cos_i) - current_p.x * temp),
-            (current_p.x * (temp2 + cos_i) - current_p.y * temp));
+  double true_longitude = atan2((current_p.y * (1.00 + temp2 * cos_i) - current_p.x * temp), (current_p.x * (temp2 + cos_i) - current_p.y * temp));
 
   double p = true_longitude - f;
   p = fmod(p + TWOPI + TWOPI, TWOPI);
@@ -192,9 +166,7 @@ __device__ void elements_from_cartesian(
   vec_semi_major_axis[idx] = semi_major_axis;
 }
 
-__device__ void body_interaction_kick(double3 *positions, double3 *velocities,
-                                      double *masses, double dt,
-                                      bool possible_close_encounter = false) {
+__device__ void body_interaction_kick(double3 *positions, double3 *velocities, double *masses, double dt, bool possible_close_encounter = false) {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   double3 acc = make_double3(0.0, 0.0, 0.0);
   double dist_x, dist_y, dist_z = 0.0;
@@ -210,8 +182,7 @@ __device__ void body_interaction_kick(double3 *positions, double3 *velocities,
     double epsilon = 1e-8;
     double r = stable_sqrt(dist_x * dist_x + dist_y * dist_y + dist_z * dist_z);
     // // magnitude of acceleration = mass_of_other_body * G / |r|^3
-    double changeover_weight =
-        changeover(positions, velocities, masses, r, i, idx, dt);
+    double changeover_weight = changeover(positions, velocities, masses, r, i, idx, dt);
     if (possible_close_encounter) {
       double r_crit = fetch_r_crit(positions, velocities, masses, idx, i, dt);
       if (r < r_crit) {
@@ -220,8 +191,7 @@ __device__ void body_interaction_kick(double3 *positions, double3 *velocities,
       }
     }
 
-    double weighted_acceleration =
-        changeover_weight * masses[i + 1] / pow(r + epsilon, 3);
+    double weighted_acceleration = changeover_weight * masses[i + 1] / pow(r + epsilon, 3);
     // // accumulate total acceleration due to all bodies, except self
     acc.x += weighted_acceleration * dist_x;
     acc.y += weighted_acceleration * dist_y;
@@ -234,8 +204,7 @@ __device__ void body_interaction_kick(double3 *positions, double3 *velocities,
   velocities[idx].z += acc.z * dt;
 }
 
-__device__ void main_body_kinetic(double3 *positions, double3 *velocities,
-                                  double *masses, double dt) {
+__device__ void main_body_kinetic(double3 *positions, double3 *velocities, double *masses, double dt) {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   double3 p = make_double3(0.0, 0.0, 0.0);
   // calculate total momentum of all bodies
@@ -251,8 +220,7 @@ __device__ void main_body_kinetic(double3 *positions, double3 *velocities,
   positions[idx].z += p.z * scaling_factor;
 }
 
-__device__ void update_velocities(double3 *positions, double3 *velocities,
-                                  double *masses, double dt) {
+__device__ void update_velocities(double3 *positions, double3 *velocities, double *masses, double dt) {
   /*
   updates the velocities of all bodies based on the mass distribution of all
   bodies (incl the sun)
@@ -266,8 +234,7 @@ __device__ void update_velocities(double3 *positions, double3 *velocities,
   // a = - G * M / r^3 * r, which in this case simplifies to 1/(r^3) * r_vec
   double3 z_1 = positions[idx];
   double r = magnitude(z_1);
-  double3 r_vec =
-      make_double3(z_1.x / pow(r, 3), z_1.y / pow(r, 3), z_1.z / pow(r, 3));
+  double3 r_vec = make_double3(z_1.x / pow(r, 3), z_1.y / pow(r, 3), z_1.z / pow(r, 3));
   // negative bc directed inwards
   velocities[idx].x -= r_vec.x * dt;
   velocities[idx].y -= r_vec.y * dt;
@@ -279,8 +246,7 @@ struct PosVel {
   double3 vel;
 };
 
-__device__ PosVel modified_midpoint(double3 *positions, double3 *velocities,
-                                    double *masses, double dt, int N) {
+__device__ PosVel modified_midpoint(double3 *positions, double3 *velocities, double *masses, double dt, int N) {
   /*
   returns an updated position based on the modified midpoint method.
   */
@@ -348,9 +314,7 @@ __device__ bool is_converged(PosVel a_1, PosVel a_0) {
   return (mag_vel + mag_pos) < BULIRSCH_STOER_TOLERANCE;
 }
 
-__device__ void richardson_extrapolation(double3 *positions,
-                                         double3 *velocities, double *masses,
-                                         double dt) {
+__device__ void richardson_extrapolation(double3 *positions, double3 *velocities, double *masses, double dt) {
   const int MAX_ROWS = 4;
   int N = 1;
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -364,20 +328,14 @@ __device__ void richardson_extrapolation(double3 *positions,
       double pow2 = pow(2, j);
 
       // for positions
-      buffer[i][j].pos.x =
-          pow2 * buffer[i][j - 1].pos.x - buffer[i - 1][j - 1].pos.x;
-      buffer[i][j].pos.y =
-          pow2 * buffer[i][j - 1].pos.y - buffer[i - 1][j - 1].pos.y;
-      buffer[i][j].pos.z =
-          pow2 * buffer[i][j - 1].pos.z - buffer[i - 1][j - 1].pos.z;
+      buffer[i][j].pos.x = pow2 * buffer[i][j - 1].pos.x - buffer[i - 1][j - 1].pos.x;
+      buffer[i][j].pos.y = pow2 * buffer[i][j - 1].pos.y - buffer[i - 1][j - 1].pos.y;
+      buffer[i][j].pos.z = pow2 * buffer[i][j - 1].pos.z - buffer[i - 1][j - 1].pos.z;
 
       // for velocities
-      buffer[i][j].vel.x =
-          pow2 * buffer[i][j - 1].vel.x - buffer[i - 1][j - 1].vel.x;
-      buffer[i][j].vel.y =
-          pow2 * buffer[i][j - 1].vel.y - buffer[i - 1][j - 1].vel.y;
-      buffer[i][j].vel.z =
-          pow2 * buffer[i][j - 1].vel.z - buffer[i - 1][j - 1].vel.z;
+      buffer[i][j].vel.x = pow2 * buffer[i][j - 1].vel.x - buffer[i - 1][j - 1].vel.x;
+      buffer[i][j].vel.y = pow2 * buffer[i][j - 1].vel.y - buffer[i - 1][j - 1].vel.y;
+      buffer[i][j].vel.z = pow2 * buffer[i][j - 1].vel.z - buffer[i - 1][j - 1].vel.z;
 
       pow2 -= 1;
 
@@ -400,8 +358,7 @@ __device__ void richardson_extrapolation(double3 *positions,
 
 // this ensures that the sun is in a reference frame in which it is stationary
 // and at the origin
-__device__ void convert_to_democratic_heliocentric_coordinates(
-    double3 *positions, double3 *velocities, double *masses) {
+__device__ void convert_to_democratic_heliocentric_coordinates(double3 *positions, double3 *velocities, double *masses) {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   double total_mass = 0.0;
   double3 mass_weighted_v = make_double3(0.0, 0.0, 0.0);
@@ -422,8 +379,7 @@ __device__ void convert_to_democratic_heliocentric_coordinates(
   velocities[idx].z -= mass_weighted_v.z;
 }
 
-__device__ bool close_encounter_p(double3 *positions, double3 *velocities,
-                                  double *masses, double dt) {
+__device__ bool close_encounter_p(double3 *positions, double3 *velocities, double *masses, double dt) {
   // get indices of bodies i am undergoing close encounters with
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   for (int i = 0; i < blockDim.x; i++) {
@@ -442,13 +398,7 @@ __device__ bool close_encounter_p(double3 *positions, double3 *velocities,
   return false;
 }
 
-__global__ void
-mercurius_solver(double *vec_argument_of_perihelion_hbm,
-                 double *vec_mean_anomaly_hbm, double *vec_eccentricity_hbm,
-                 double *vec_semi_major_axis_hbm, double *vec_inclination_hbm,
-                 double *vec_longitude_of_ascending_node_hbm,
-                 double *vec_masses_hbm, double3 *output_positions, double dt,
-                 int NUM_TIMESTEPS) {
+__global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm, double *vec_mean_anomaly_hbm, double *vec_eccentricity_hbm, double *vec_semi_major_axis_hbm, double *vec_inclination_hbm, double *vec_longitude_of_ascending_node_hbm, double *vec_masses_hbm, double3 *output_positions, double dt, int NUM_TIMESTEPS) {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
 
   // declare buffers for positions in SRAM
@@ -473,14 +423,10 @@ mercurius_solver(double *vec_argument_of_perihelion_hbm,
   vec_eccentricity[idx] = vec_eccentricity_hbm[idx];
   vec_semi_major_axis[idx] = vec_semi_major_axis_hbm[idx];
   vec_inclination[idx] = vec_inclination_hbm[idx];
-  vec_longitude_of_ascending_node[idx] =
-      vec_longitude_of_ascending_node_hbm[idx];
+  vec_longitude_of_ascending_node[idx] = vec_longitude_of_ascending_node_hbm[idx];
   __syncthreads();
   // initially populate positions and velocities
-  cartesian_from_elements(vec_inclination, vec_longitude_of_ascending_node,
-                          vec_argument_of_perihelion, vec_mean_anomaly,
-                          vec_eccentricity, vec_semi_major_axis, positions,
-                          velocities);
+  cartesian_from_elements(vec_inclination, vec_longitude_of_ascending_node, vec_argument_of_perihelion, vec_mean_anomaly, vec_eccentricity, vec_semi_major_axis, positions, velocities);
 
   __syncthreads();
   // convert to democratic heliocentric coordinates
@@ -500,20 +446,14 @@ mercurius_solver(double *vec_argument_of_perihelion_hbm,
     if (close_encounter_p(positions, velocities, masses, dt)) {
       richardson_extrapolation(positions, velocities, masses, dt);
     } else {
-      elements_from_cartesian(positions, velocities, vec_inclination,
-                              vec_longitude_of_ascending_node,
-                              vec_argument_of_perihelion, vec_mean_anomaly,
-                              vec_eccentricity, vec_semi_major_axis);
+      elements_from_cartesian(positions, velocities, vec_inclination, vec_longitude_of_ascending_node, vec_argument_of_perihelion, vec_mean_anomaly, vec_eccentricity, vec_semi_major_axis);
     }
     __syncthreads();
     // // advance mean anomaly, this is essentially advancing to the next
     // timestep
     vec_mean_anomaly[idx] = fmod(n * dt + vec_mean_anomaly[idx], TWOPI);
     __syncthreads();
-    cartesian_from_elements(vec_inclination, vec_longitude_of_ascending_node,
-                            vec_argument_of_perihelion, vec_mean_anomaly,
-                            vec_eccentricity, vec_semi_major_axis, positions,
-                            velocities);
+    cartesian_from_elements(vec_inclination, vec_longitude_of_ascending_node, vec_argument_of_perihelion, vec_mean_anomaly, vec_eccentricity, vec_semi_major_axis, positions, velocities);
 
     __syncthreads();
     main_body_kinetic(positions, velocities, masses, dt / 2.00);

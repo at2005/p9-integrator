@@ -8,8 +8,7 @@ __host__ int main(int argc, char **argv) {
   std::string config_file;
   // default is one orbital period (of Earth)
   int NUM_TIMESTEPS = 1;
-  args_parse(argc, argv, &print_sim_info, &print_positions, &NUM_TIMESTEPS,
-             &config_file);
+  args_parse(argc, argv, &print_sim_info, &print_positions, &NUM_TIMESTEPS, &config_file);
 
   Sim sim;
   sim_from_config_file(&sim, config_file, NUM_TIMESTEPS);
@@ -19,63 +18,39 @@ __host__ int main(int argc, char **argv) {
 
   // this is bc we need to allocate memory on the device (on HBM – global
   // memory, copy to SRAM later)
-  double *vec_longitude_of_ascending_node_device, *vec_inclination_device,
-      *vec_argument_of_perihelion_device, *vec_mean_anomaly_device,
-      *vec_eccentricity_device, *vec_semi_major_axis_device, *masses_device;
+  double *vec_longitude_of_ascending_node_device, *vec_inclination_device, *vec_argument_of_perihelion_device, *vec_mean_anomaly_device, *vec_eccentricity_device, *vec_semi_major_axis_device, *masses_device;
   double3 *output_positions_device;
-  double3 *output_positions =
-      (double3 *)malloc(sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS);
+  double3 *output_positions = (double3 *)malloc(sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS);
 
-  cudaMalloc((void **)&vec_longitude_of_ascending_node_device,
-             sim.num_bodies * sizeof(double));
+  cudaMalloc((void **)&vec_longitude_of_ascending_node_device, sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&vec_inclination_device, sim.num_bodies * sizeof(double));
-  cudaMalloc((void **)&vec_argument_of_perihelion_device,
-             sim.num_bodies * sizeof(double));
-  cudaMalloc((void **)&vec_mean_anomaly_device,
-             sim.num_bodies * sizeof(double));
-  cudaMalloc((void **)&vec_eccentricity_device,
-             sim.num_bodies * sizeof(double));
-  cudaMalloc((void **)&vec_semi_major_axis_device,
-             sim.num_bodies * sizeof(double));
+  cudaMalloc((void **)&vec_argument_of_perihelion_device, sim.num_bodies * sizeof(double));
+  cudaMalloc((void **)&vec_mean_anomaly_device, sim.num_bodies * sizeof(double));
+  cudaMalloc((void **)&vec_eccentricity_device, sim.num_bodies * sizeof(double));
+  cudaMalloc((void **)&vec_semi_major_axis_device, sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&masses_device, (sim.num_bodies + 1) * sizeof(double));
-  cudaMalloc((void **)&output_positions_device,
-             sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS);
+  cudaMalloc((void **)&output_positions_device, sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS);
 
-  cudaMemcpy(vec_longitude_of_ascending_node_device,
-             sim.vec_longitude_of_ascending_node,
-             sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
-  cudaMemcpy(vec_inclination_device, sim.vec_inclination,
-             sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
-  cudaMemcpy(vec_argument_of_perihelion_device, sim.vec_argument_of_perihelion,
-             sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
-  cudaMemcpy(vec_mean_anomaly_device, sim.vec_mean_anomaly,
-             sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
-  cudaMemcpy(vec_eccentricity_device, sim.vec_eccentricity,
-             sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
-  cudaMemcpy(vec_semi_major_axis_device, sim.vec_semi_major_axis,
-             sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
-  cudaMemcpy(masses_device, sim.masses, (sim.num_bodies + 1) * sizeof(double),
-             cudaMemcpyHostToDevice);
+  cudaMemcpy(vec_longitude_of_ascending_node_device, sim.vec_longitude_of_ascending_node, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+  cudaMemcpy(vec_inclination_device, sim.vec_inclination, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+  cudaMemcpy(vec_argument_of_perihelion_device, sim.vec_argument_of_perihelion, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+  cudaMemcpy(vec_mean_anomaly_device, sim.vec_mean_anomaly, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+  cudaMemcpy(vec_eccentricity_device, sim.vec_eccentricity, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+  cudaMemcpy(vec_semi_major_axis_device, sim.vec_semi_major_axis, sim.num_bodies * sizeof(double), cudaMemcpyHostToDevice);
+  cudaMemcpy(masses_device, sim.masses, (sim.num_bodies + 1) * sizeof(double), cudaMemcpyHostToDevice);
 
   // print sim information
   if (print_sim_info) {
     dump_sim(&sim);
-    std::cout << "Launching kernel on " << sim.num_bodies << " threads"
-              << std::endl;
+    std::cout << "Launching kernel on " << sim.num_bodies << " threads" << std::endl;
   }
 
-  mercurius_solver<<<1, sim.num_bodies>>>(
-      vec_argument_of_perihelion_device, vec_mean_anomaly_device,
-      vec_eccentricity_device, vec_semi_major_axis_device,
-      vec_inclination_device, vec_longitude_of_ascending_node_device,
-      masses_device, output_positions_device, dt, NUM_TIMESTEPS);
+  mercurius_solver<<<1, sim.num_bodies>>>(vec_argument_of_perihelion_device, vec_mean_anomaly_device, vec_eccentricity_device, vec_semi_major_axis_device, vec_inclination_device, vec_longitude_of_ascending_node_device, masses_device, output_positions_device, dt, NUM_TIMESTEPS);
 
   if (print_sim_info)
     std::cout << "Simulation Finished. Synchronizing...\n";
   cudaDeviceSynchronize();
-  cudaMemcpy(output_positions, output_positions_device,
-             sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS,
-             cudaMemcpyDeviceToHost);
+  cudaMemcpy(output_positions, output_positions_device, sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS, cudaMemcpyDeviceToHost);
 
   if (print_positions)
     pretty_print_positions(&sim, output_positions);

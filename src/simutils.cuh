@@ -41,10 +41,8 @@ struct Sim {
 
 __host__ void initialize_std_sim(Sim *sim, int num_bodies, int num_timesteps) {
   sim->vec_inclination = (double *)malloc(num_bodies * sizeof(double));
-  sim->vec_longitude_of_ascending_node =
-      (double *)malloc(num_bodies * sizeof(double));
-  sim->vec_argument_of_perihelion =
-      (double *)malloc(num_bodies * sizeof(double));
+  sim->vec_longitude_of_ascending_node = (double *)malloc(num_bodies * sizeof(double));
+  sim->vec_argument_of_perihelion = (double *)malloc(num_bodies * sizeof(double));
   sim->vec_mean_anomaly = (double *)malloc(num_bodies * sizeof(double));
   sim->vec_eccentricity = (double *)malloc(num_bodies * sizeof(double));
   sim->vec_semi_major_axis = (double *)malloc(num_bodies * sizeof(double));
@@ -74,21 +72,16 @@ __host__ void dump_sim(Sim *sim) {
   for (int i = 0; i < sim->num_bodies; i++) {
     std::cout << "Body: " << i << std::endl;
     std::cout << "inclination: " << sim->vec_inclination[i] << std::endl;
-    std::cout << "longitude of ascending node: "
-              << sim->vec_longitude_of_ascending_node[i] << std::endl;
-    std::cout << "argument of perihelion: "
-              << sim->vec_argument_of_perihelion[i] << std::endl;
+    std::cout << "longitude of ascending node: " << sim->vec_longitude_of_ascending_node[i] << std::endl;
+    std::cout << "argument of perihelion: " << sim->vec_argument_of_perihelion[i] << std::endl;
     std::cout << "mean anomaly: " << sim->vec_mean_anomaly[i] << std::endl;
     std::cout << "eccentricity: " << sim->vec_eccentricity[i] << std::endl;
-    std::cout << "semi major axis: " << sim->vec_semi_major_axis[i]
-              << std::endl;
+    std::cout << "semi major axis: " << sim->vec_semi_major_axis[i] << std::endl;
     std::cout << "mass: " << sim->masses[i + 1] << std::endl << std::endl;
   }
 }
 
-__host__ void args_parse(int argc, char **argv, bool *print_sim_info,
-                         bool *print_positions, int *num_timesteps,
-                         std::string *config_file) {
+__host__ void args_parse(int argc, char **argv, bool *print_sim_info, bool *print_positions, int *num_timesteps, std::string *config_file) {
   for (int i = 0; i < argc; i++) {
     // print sim info
     if (!strcmp(argv[i], "-i")) {
@@ -114,10 +107,7 @@ __host__ void pretty_print_positions(Sim *sim, double3 *output_positions) {
   for (int i = 0; i < sim->num_timesteps; i++) {
     std::cout << "# Timestep " << i << std::endl;
     for (int j = 0; j < sim->num_bodies; j++) {
-      std::cout << sim->body_names[j] << ": "
-                << output_positions[i * sim->num_bodies + j].x << " "
-                << output_positions[i * sim->num_bodies + j].y << " "
-                << output_positions[i * sim->num_bodies + j].z << std::endl;
+      std::cout << sim->body_names[j] << ": " << output_positions[i * sim->num_bodies + j].x << " " << output_positions[i * sim->num_bodies + j].y << " " << output_positions[i * sim->num_bodies + j].z << std::endl;
     }
     std::cout << std::endl;
   }
@@ -125,8 +115,7 @@ __host__ void pretty_print_positions(Sim *sim, double3 *output_positions) {
   std::cout << std::endl;
 }
 
-__host__ void sim_from_config_file(Sim *sim, std::string config_file,
-                                   int num_timesteps) {
+__host__ void sim_from_config_file(Sim *sim, std::string config_file, int num_timesteps) {
   /*
   The structure of the JSON config file is as follows:
 
