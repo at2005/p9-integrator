@@ -1,7 +1,6 @@
 #ifndef __CONSTANTS_CUH__
 #define __CONSTANTS_CUH__
 
-#define NUM_BODIES 2
 #define MAX_ITERATIONS_ROOT_FINDING 20
 #define CUTOFF 1e-13
 #define BULIRSCH_STOER_TOLERANCE 1e-12

@@ -61,20 +61,18 @@ __device__ double danby_burkardt(double mean_anomaly, double eccentricity) {
 }
 
 __device__ double fetch_r_crit(double3 *positions, double3 *velocities, double *masses, int idx1, int idx2, double dt) {
-  // // anywhere between 3-10
-  // double n1 = 6.50;
-  // // anywhere between 0.3-2.0
-  // double n2 = 1.15;
-  // double r1 = magnitude(positions[idx1]);
-  // double r2 = magnitude(positions[idx2]);
-  // double v1 = magnitude(velocities[idx1]);
-  // double v2 = magnitude(velocities[idx2]);
-  // double mutual_hill_radius = cbrt(masses[idx1] + masses[idx2] / 3.00) * (r1 + r2) / 2.00;
-  // double vmax = max(v1, v2);
-  // return max(n1 * mutual_hill_radius, n2 * vmax * dt);
-  
-  // for now let's just keep this hardcoded lol
-  return 0.06;
+  // anywhere between 3-10
+  double n1 = 3.50;
+  // anywhere between 0.3-2.0
+  double n2 = 2;
+  double r1 = magnitude(positions[idx1]);
+  double r2 = magnitude(positions[idx2]);
+  double v1 = magnitude(velocities[idx1]);
+  double v2 = magnitude(velocities[idx2]);
+  double mutual_hill_radius = cbrt(masses[idx1] + masses[idx2] / 3.00) * (r1 + r2) / 2.00;
+  double vmax = max(v1, v2);
+  return max(n1 * mutual_hill_radius, n2 * vmax * dt);
+  // return 0.06;
 }
 
 __device__ double changeover(double3 *positions, double3 *velocities, double *masses, double r_ij, int idx1, int idx2, double dt) {
@@ -173,7 +171,7 @@ __device__ void body_interaction_kick(double3 *positions, double3 *velocities, d
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   double3 acc = make_double3(0.0, 0.0, 0.0);
   double dist_x, dist_y, dist_z = 0.0;
-  for (int i = 0; i < NUM_BODIES; i++) {
+  for (int i = 0; i < blockDim.x; i++) {
     if (i == idx)
       continue;
     // 3-vec displacement, let r = x, y, z, this is the direction of the
@@ -194,7 +192,7 @@ __device__ void body_interaction_kick(double3 *positions, double3 *velocities, d
     }
 
     // add smoothing constant
-    double r_sq = r*r;
+    double r_sq = r * r;
     r_sq += SMOOTHING_CONSTANT * SMOOTHING_CONSTANT;
     double force_denom = r_sq * r;
 
@@ -326,7 +324,7 @@ __device__ bool is_converged(PosVel a_1, PosVel a_0) {
 }
 
 __device__ void richardson_extrapolation(double3 *positions, double3 *velocities, double *masses, double dt) {
-  const int MAX_ROWS = 4;
+  const int MAX_ROWS = 6;
   int N = 1;
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   PosVel buffer[MAX_ROWS][MAX_ROWS];
@@ -365,6 +363,9 @@ __device__ void richardson_extrapolation(double3 *positions, double3 *velocities
       return;
     }
   }
+
+  positions[idx] = buffer[MAX_ROWS - 1][MAX_ROWS - 1].pos;
+  velocities[idx] = buffer[MAX_ROWS - 1][MAX_ROWS - 1].vel;
 }
 
 // this ensures that the sun is in a reference frame in which it is stationary
@@ -411,17 +412,18 @@ __device__ bool close_encounter_p(double3 *positions, double3 *velocities, doubl
 
 __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm, double *vec_mean_anomaly_hbm, double *vec_eccentricity_hbm, double *vec_semi_major_axis_hbm, double *vec_inclination_hbm, double *vec_longitude_of_ascending_node_hbm, double *vec_masses_hbm, double3 *output_positions, double dt, int NUM_TIMESTEPS) {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
-
   // declare buffers for positions in SRAM
-  __shared__ double3 positions[NUM_BODIES];
-  __shared__ double3 velocities[NUM_BODIES];
-  __shared__ double masses[NUM_BODIES + 1];
-  __shared__ double vec_inclination[NUM_BODIES];
-  __shared__ double vec_longitude_of_ascending_node[NUM_BODIES];
-  __shared__ double vec_argument_of_perihelion[NUM_BODIES];
-  __shared__ double vec_mean_anomaly[NUM_BODIES];
-  __shared__ double vec_eccentricity[NUM_BODIES];
-  __shared__ double vec_semi_major_axis[NUM_BODIES];
+
+  extern __shared__ char total_memory[];
+  double3 *positions = (double3 *)total_memory;
+  double3 *velocities = (double3 *)(positions + blockDim.x);
+  double *masses = (double *)(velocities + blockDim.x);
+  double *vec_inclination = (double *)(masses + (blockDim.x + 1));
+  double *vec_longitude_of_ascending_node = (double *)(vec_inclination + blockDim.x);
+  double *vec_argument_of_perihelion = (double *)(vec_longitude_of_ascending_node + blockDim.x);
+  double *vec_mean_anomaly = (double *)(vec_argument_of_perihelion + blockDim.x);
+  double *vec_eccentricity = (double *)(vec_mean_anomaly + blockDim.x);
+  double *vec_semi_major_axis = (double *)(vec_eccentricity + blockDim.x);
 
   // copy data to shared memory
   // special case to avoid race condition
@@ -460,10 +462,8 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm, double 
       elements_from_cartesian(positions, velocities, vec_inclination, vec_longitude_of_ascending_node, vec_argument_of_perihelion, vec_mean_anomaly, vec_eccentricity, vec_semi_major_axis);
       // advance mean anomaly, this is essentially advancing to the next timestep
       vec_mean_anomaly[idx] = fmod(n * dt + vec_mean_anomaly[idx], TWOPI);
+      cartesian_from_elements(vec_inclination, vec_longitude_of_ascending_node, vec_argument_of_perihelion, vec_mean_anomaly, vec_eccentricity, vec_semi_major_axis, positions, velocities);
     }
-
-    __syncthreads();
-    cartesian_from_elements(vec_inclination, vec_longitude_of_ascending_node, vec_argument_of_perihelion, vec_mean_anomaly, vec_eccentricity, vec_semi_major_axis, positions, velocities);
 
     __syncthreads();
     main_body_kinetic(positions, velocities, masses, dt / 2.00);

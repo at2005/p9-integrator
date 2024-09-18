@@ -15,7 +15,8 @@ __host__ int main(int argc, char **argv) {
 
   // set integration timestep to the one BB21 use
   // double dt = 0.8219;
-  double dt = 5 / 365;
+  double dt = 0.1;
+  // double dt = 5 / 365;
 
   // this is bc we need to allocate memory on the device (on HBM – global
   // memory, copy to SRAM later)
@@ -46,7 +47,9 @@ __host__ int main(int argc, char **argv) {
     std::cout << "Launching kernel on " << sim.num_bodies << " threads" << std::endl;
   }
 
-  mercurius_solver<<<1, sim.num_bodies>>>(vec_argument_of_perihelion_device, vec_mean_anomaly_device, vec_eccentricity_device, vec_semi_major_axis_device, vec_inclination_device, vec_longitude_of_ascending_node_device, masses_device, output_positions_device, dt, NUM_TIMESTEPS);
+  // positions and velocity 3-vectors, 6 orbital elements for each body, mass for each body (so 7 doubles) + 1 for sun
+  size_t sram_size = sim.num_bodies * sizeof(double3) * 2 + sim.num_bodies * sizeof(double) * 7 + sizeof(double);
+  mercurius_solver<<<1, sim.num_bodies, sram_size>>>(vec_argument_of_perihelion_device, vec_mean_anomaly_device, vec_eccentricity_device, vec_semi_major_axis_device, vec_inclination_device, vec_longitude_of_ascending_node_device, masses_device, output_positions_device, dt, NUM_TIMESTEPS);
 
   if (print_sim_info)
     std::cout << "Simulation Finished. Synchronizing...\n";
