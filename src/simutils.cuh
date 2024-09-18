@@ -13,7 +13,8 @@
 #include "constants.cuh"
 #include "json.hpp"
 
-struct Body {
+struct Body
+{
   double inclination;
   double longitude_of_ascending_node;
   double argument_of_perihelion;
@@ -24,7 +25,8 @@ struct Body {
   std::string name;
 };
 
-struct Sim {
+struct Sim
+{
   int num_bodies;
   int num_timesteps;
   double3 *positions;
@@ -39,15 +41,19 @@ struct Sim {
   std::string *body_names;
 };
 
-struct PosVel {
+struct PosVel
+{
   double3 pos;
   double3 vel;
 };
 
-__host__ void initialize_std_sim(Sim *sim, int num_bodies, int num_timesteps) {
+__host__ void initialize_std_sim(Sim *sim, int num_bodies, int num_timesteps)
+{
   sim->vec_inclination = (double *)malloc(num_bodies * sizeof(double));
-  sim->vec_longitude_of_ascending_node = (double *)malloc(num_bodies * sizeof(double));
-  sim->vec_argument_of_perihelion = (double *)malloc(num_bodies * sizeof(double));
+  sim->vec_longitude_of_ascending_node =
+      (double *)malloc(num_bodies * sizeof(double));
+  sim->vec_argument_of_perihelion =
+      (double *)malloc(num_bodies * sizeof(double));
   sim->vec_mean_anomaly = (double *)malloc(num_bodies * sizeof(double));
   sim->vec_eccentricity = (double *)malloc(num_bodies * sizeof(double));
   sim->vec_semi_major_axis = (double *)malloc(num_bodies * sizeof(double));
@@ -60,7 +66,8 @@ __host__ void initialize_std_sim(Sim *sim, int num_bodies, int num_timesteps) {
   sim->num_timesteps = num_timesteps;
 }
 
-__host__ void add_body_to_sim(Sim *sim, Body body, int idx) {
+__host__ void add_body_to_sim(Sim *sim, Body body, int idx)
+{
   sim->vec_inclination[idx] = body.inclination;
   sim->vec_longitude_of_ascending_node[idx] = body.longitude_of_ascending_node;
   sim->vec_argument_of_perihelion[idx] = body.argument_of_perihelion;
@@ -71,48 +78,71 @@ __host__ void add_body_to_sim(Sim *sim, Body body, int idx) {
   sim->body_names[idx] = body.name;
 }
 
-__host__ void dump_sim(Sim *sim) {
+__host__ void dump_sim(Sim *sim)
+{
   std::cout << "Simulation with " << sim->num_bodies << " bodies" << std::endl;
   std::cout << "Main body mass: " << sim->masses[0] << std::endl;
-  for (int i = 0; i < sim->num_bodies; i++) {
+  for (int i = 0; i < sim->num_bodies; i++)
+  {
     std::cout << "Body: " << i << std::endl;
     std::cout << "inclination: " << sim->vec_inclination[i] << std::endl;
-    std::cout << "longitude of ascending node: " << sim->vec_longitude_of_ascending_node[i] << std::endl;
-    std::cout << "argument of perihelion: " << sim->vec_argument_of_perihelion[i] << std::endl;
+    std::cout << "longitude of ascending node: "
+              << sim->vec_longitude_of_ascending_node[i] << std::endl;
+    std::cout << "argument of perihelion: "
+              << sim->vec_argument_of_perihelion[i] << std::endl;
     std::cout << "mean anomaly: " << sim->vec_mean_anomaly[i] << std::endl;
     std::cout << "eccentricity: " << sim->vec_eccentricity[i] << std::endl;
-    std::cout << "semi major axis: " << sim->vec_semi_major_axis[i] << std::endl;
-    std::cout << "mass: " << sim->masses[i + 1] << std::endl << std::endl;
+    std::cout << "semi major axis: " << sim->vec_semi_major_axis[i]
+              << std::endl;
+    std::cout << "mass: " << sim->masses[i + 1] << std::endl
+              << std::endl;
   }
 }
 
-__host__ void args_parse(int argc, char **argv, bool *print_sim_info, bool *print_positions, int *num_timesteps, std::string *config_file) {
-  for (int i = 0; i < argc; i++) {
+__host__ void args_parse(int argc,
+                         char **argv,
+                         bool *print_sim_info,
+                         bool *print_positions,
+                         int *num_timesteps,
+                         std::string *config_file)
+{
+  for (int i = 0; i < argc; i++)
+  {
     // print sim info
-    if (!strcmp(argv[i], "-i")) {
+    if (!strcmp(argv[i], "-i"))
+    {
       *print_sim_info = true;
       continue;
     }
 
-    if (!strcmp(argv[i], "-p")) {
+    if (!strcmp(argv[i], "-p"))
+    {
       *print_positions = true;
     }
 
-    if (!strcmp(argv[i], "-t")) {
+    if (!strcmp(argv[i], "-t"))
+    {
       *num_timesteps = atoi(argv[i + 1]);
     }
 
-    if (!strcmp(argv[i], "-c")) {
+    if (!strcmp(argv[i], "-c"))
+    {
       *config_file = std::string(argv[i + 1]);
     }
   }
 }
 
-__host__ void pretty_print_positions(Sim *sim, double3 *output_positions) {
-  for (int i = 0; i < sim->num_timesteps; i++) {
+__host__ void pretty_print_positions(Sim *sim, double3 *output_positions)
+{
+  for (int i = 0; i < sim->num_timesteps; i++)
+  {
     std::cout << "# Timestep " << i << std::endl;
-    for (int j = 0; j < sim->num_bodies; j++) {
-      std::cout << sim->body_names[j] << ": " << output_positions[i * sim->num_bodies + j].x << " " << output_positions[i * sim->num_bodies + j].y << " " << output_positions[i * sim->num_bodies + j].z << std::endl;
+    for (int j = 0; j < sim->num_bodies; j++)
+    {
+      std::cout << sim->body_names[j] << ": "
+                << output_positions[i * sim->num_bodies + j].x << " "
+                << output_positions[i * sim->num_bodies + j].y << " "
+                << output_positions[i * sim->num_bodies + j].z << std::endl;
     }
     std::cout << std::endl;
   }
@@ -120,7 +150,10 @@ __host__ void pretty_print_positions(Sim *sim, double3 *output_positions) {
   std::cout << std::endl;
 }
 
-__host__ void sim_from_config_file(Sim *sim, std::string config_file, int num_timesteps) {
+__host__ void sim_from_config_file(Sim *sim,
+                                   std::string config_file,
+                                   int num_timesteps)
+{
   /*
   The structure of the JSON config file is as follows:
 
@@ -145,7 +178,8 @@ __host__ void sim_from_config_file(Sim *sim, std::string config_file, int num_ti
   auto bodies = config_file_json["bodies"];
   int num_bodies = bodies.size();
   initialize_std_sim(sim, num_bodies, num_timesteps);
-  for (int i = 0; i < num_bodies; i++) {
+  for (int i = 0; i < num_bodies; i++)
+  {
     auto body = bodies[i];
     Body sim_body;
     sim_body.name = body["name"];
