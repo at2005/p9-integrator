@@ -39,6 +39,11 @@ struct Sim {
   std::string *body_names;
 };
 
+struct PosVel {
+  double3 pos;
+  double3 vel;
+};
+
 __host__ void initialize_std_sim(Sim *sim, int num_bodies, int num_timesteps) {
   sim->vec_inclination = (double *)malloc(num_bodies * sizeof(double));
   sim->vec_longitude_of_ascending_node = (double *)malloc(num_bodies * sizeof(double));

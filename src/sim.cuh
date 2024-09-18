@@ -60,30 +60,66 @@ __device__ double danby_burkardt(double mean_anomaly, double eccentricity) {
   return E;
 }
 
-__device__ double fetch_r_crit(double3 *positions, double3 *velocities, double *masses, int idx1, int idx2, double dt) {
+__device__ double dist(double3 a, double3 b) {
+  return magnitude(make_double3(a.x - b.x, a.y - b.y, a.z - b.z));
+}
+
+__device__ double fetch_r_crit(
+    // read only
+    const double3* positions,
+    const double3* velocities,
+    const double *masses,
+    int idx_other,
+    double dt
+  ) {
   // anywhere between 3-10
+  int idx = threadIdx.x + blockIdx.x * blockDim.x;
   double n1 = 3.50;
   // anywhere between 0.3-2.0
   double n2 = 2;
-  double r1 = magnitude(positions[idx1]);
-  double r2 = magnitude(positions[idx2]);
-  double v1 = magnitude(velocities[idx1]);
-  double v2 = magnitude(velocities[idx2]);
-  double mutual_hill_radius = cbrt(masses[idx1] + masses[idx2] / 3.00) * (r1 + r2) / 2.00;
+  double r1 = magnitude(positions[idx]);
+  double r2 = magnitude(positions[idx_other]);
+  double v1 = magnitude(velocities[idx]);
+  double v2 = magnitude(velocities[idx_other]);
+  double mutual_hill_radius = cbrt(masses[idx+1] + masses[idx_other+1] / 3.00) * (r1 + r2) / 2.00;
   double vmax = max(v1, v2);
   return max(n1 * mutual_hill_radius, n2 * vmax * dt);
-  // return 0.06;
 }
 
-__device__ double changeover(double3 *positions, double3 *velocities, double *masses, double r_ij, int idx1, int idx2, double dt) {
-  double r_crit = fetch_r_crit(positions, velocities, masses, idx1, idx2, dt);
+struct KR_Crit {
+  double r_crit;
+  double K;
+};
+
+__device__ KR_Crit changeover(
+    const double3 *positions,
+    const double3 *velocities,
+    const double *masses,
+    int idx_other,
+    double dt
+  ) {
+  
+  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  double r_crit = fetch_r_crit(
+    positions,
+    velocities,
+    masses,
+    idx_other,
+    dt
+  );
+
+  KR_Crit res;
+  res.r_crit = r_crit;
+
+  double r_ij = dist(positions[idx_other], positions[idx]);
   double y = (r_ij - 0.1 * r_crit) / (0.9 * r_crit);
   double K = y * y / (2 * y * y - 2 * y + 1);
   // trying to avoid branching
   double gtz = (double)(y > 0);
   double gto = (double)(y > 1);
   double valid = (double)(y <= 1 && y >= 0);
-  return K * gtz * valid + gto;
+  res.K = K * gtz * valid + gto;
+  return res;
 }
 
 __device__ void cartesian_from_elements(double *vec_inclination, double *vec_longitude_of_ascending_node, double *vec_argument_of_perihelion, double *vec_mean_anomaly, double *vec_eccentricity, double *vec_semi_major_axis, double3 *current_positions, double3 *current_velocities) {
@@ -167,24 +203,44 @@ __device__ void elements_from_cartesian(double3 *current_positions, double3 *cur
   vec_semi_major_axis[idx] = semi_major_axis;
 }
 
-__device__ void body_interaction_kick(double3 *positions, double3 *velocities, double *masses, double dt, bool possible_close_encounter = false) {
+
+// this function returns an updated velocity
+__device__ double3 body_interaction_kick(
+    // position and velocity arrays are read-only
+    const double3 *positions, 
+    const double3 *velocities, 
+    const double *masses, 
+    double dt, 
+    bool possible_close_encounter = false
+  ) {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  const double3 my_position = positions[idx];
+  double3 my_velocity = velocities[idx];
   double3 acc = make_double3(0.0, 0.0, 0.0);
-  double dist_x, dist_y, dist_z = 0.0;
+  double3 dist; 
   for (int i = 0; i < blockDim.x; i++) {
     if (i == idx)
       continue;
     // 3-vec displacement, let r = x, y, z, this is the direction of the
     // acceleration it is directed towards the other body since gravity is
     // attractive
-    dist_x = positions[i].x - positions[idx].x;
-    dist_y = positions[i].y - positions[idx].y;
-    dist_z = positions[i].z - positions[idx].z;
-    double r = stable_sqrt(dist_x * dist_x + dist_y * dist_y + dist_z * dist_z);
-    // // magnitude of acceleration = mass_of_other_body * G / |r|^3
-    double changeover_weight = changeover(positions, velocities, masses, r, i, idx, dt);
+    dist.x = positions[i].x - my_position.x;
+    dist.y = positions[i].y - my_position.y;
+    dist.z = positions[i].z - my_position.z;
+    double r = magnitude(dist);
+
+    // compute both K and r_crit
+    KR_Crit changeover_vals = changeover(
+      positions,
+      velocities,
+      masses,
+      i,
+      dt
+    );
+
+    double changeover_weight = changeover_vals.K;
+    double r_crit = changeover_vals.r_crit;
     if (possible_close_encounter) {
-      double r_crit = fetch_r_crit(positions, velocities, masses, idx, i, dt);
       if (r < r_crit) {
         // 1 - K weighting if close encounter
         changeover_weight = 1 - changeover_weight;
@@ -194,23 +250,32 @@ __device__ void body_interaction_kick(double3 *positions, double3 *velocities, d
     // add smoothing constant
     double r_sq = r * r;
     r_sq += SMOOTHING_CONSTANT * SMOOTHING_CONSTANT;
+    // the (r^2 + s^2) comes from inv sq law w/ smoothing, and the other r bc direction is normalized
     double force_denom = r_sq * r;
 
     double weighted_acceleration = changeover_weight * masses[i + 1] / force_denom;
     // // accumulate total acceleration due to all bodies, except self
-    acc.x += weighted_acceleration * dist_x;
-    acc.y += weighted_acceleration * dist_y;
-    acc.z += weighted_acceleration * dist_z;
+    acc.x += weighted_acceleration * dist.x;
+    acc.y += weighted_acceleration * dist.y;
+    acc.z += weighted_acceleration * dist.z;
   }
 
   // update momenta (velocity here) with total acceleration
-  velocities[idx].x += acc.x * dt;
-  velocities[idx].y += acc.y * dt;
-  velocities[idx].z += acc.z * dt;
+  my_velocity.x += acc.x * dt;
+  my_velocity.y += acc.y * dt;
+  my_velocity.z += acc.z * dt;
+  return my_velocity;
 }
 
-__device__ void main_body_kinetic(double3 *positions, double3 *velocities, double *masses, double dt) {
+
+__device__ double3 main_body_kinetic(
+    const double3 *positions, 
+    const double3 *velocities,
+    const double *masses, 
+    double dt
+  ) {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  double3 my_position = positions[idx];
   double3 p = make_double3(0.0, 0.0, 0.0);
   // calculate total momentum of all bodies
   for (int i = 1; i < blockDim.x + 1; i++) {
@@ -220,34 +285,43 @@ __device__ void main_body_kinetic(double3 *positions, double3 *velocities, doubl
   }
 
   double scaling_factor = dt / (masses[0]);
-  positions[idx].x += p.x * scaling_factor;
-  positions[idx].y += p.y * scaling_factor;
-  positions[idx].z += p.z * scaling_factor;
+  my_position.x += p.x * scaling_factor;
+  my_position.y += p.y * scaling_factor;
+  my_position.z += p.z * scaling_factor;
+  return my_position;
 }
 
-__device__ void update_velocities(double3 *positions, double3 *velocities, double *masses, double dt) {
+// this numerically advances the velocity, taking into account the masses of all bodies (incl sun)
+__device__ double3 update_my_velocity_total(
+    const double3 *positions, 
+    const double3 *velocities, 
+    const double *masses, 
+    double dt
+  ) {
   /*
   updates the velocities of all bodies based on the mass distribution of all
   bodies (incl the sun)
   */
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  const double3 my_position = positions[idx];
+  double3 my_velocity = velocities[idx];
   // the body interaction kick updates velocities based on the masses of all
   // minor bodies
   body_interaction_kick(positions, velocities, masses, dt, true);
   // now for the main body:
   // update acceleration due to main body
   // a = - G * M / r^3 * r, which in this case simplifies to 1/(r^3) * r_vec
-  double3 z_1 = positions[idx];
-  double r_sq = magnitude_squared(z_1);
+  double r_sq = magnitude_squared(my_position);
   double r = stable_sqrt(r_sq);
   // add smoothing constant
   r_sq += SMOOTHING_CONSTANT * SMOOTHING_CONSTANT;
   double force_denom = r_sq * r;
-  double3 r_vec = make_double3(z_1.x / force_denom, z_1.y / force_denom, z_1.z / force_denom);
+  double3 r_vec = make_double3(my_position.x / force_denom, my_position.y / force_denom, my_position.z / force_denom);
   // negative bc directed inwards
-  velocities[idx].x -= r_vec.x * dt;
-  velocities[idx].y -= r_vec.y * dt;
-  velocities[idx].z -= r_vec.z * dt;
+  my_velocity.x -= r_vec.x * dt;
+  my_velocity.y -= r_vec.y * dt;
+  my_velocity.z -= r_vec.z * dt;
+  return my_velocity;
 }
 
 struct PosVel {
@@ -255,27 +329,36 @@ struct PosVel {
   double3 vel;
 };
 
-__device__ PosVel modified_midpoint(double3 *positions, double3 *velocities, double *masses, double dt, int N) {
+__device__ PosVel modified_midpoint(
+    const double3 *positions, 
+    const double3 *velocities,
+    const double *masses, 
+    double dt, 
+    int N
+  ) {
   /*
   returns an updated position based on the modified midpoint method.
   */
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  
+  // only these will change for the duration of this kernel
+  double3 local_position = positions[idx];
+  double3 local_velocity = velocities[idx];
+
   // initial velocity, we need this for later
-  double3 v = velocities[idx];
-  double3 x = positions[idx];
   double subdelta = dt / N;
 
   // euler step
   // this sets up z_1 and z_0
   // so we can use z_0 to calc z_2 and use z_1 for z_3
-  double3 z_1 = positions[idx];
-  z_1.x += v.x * subdelta;
-  z_1.y += v.y * subdelta;
-  z_1.z += v.z * subdelta;
+  double3 z_1 = local_position;
+  z_1.x += local_velocity.x * subdelta;
+  z_1.y += local_velocity.y * subdelta;
+  z_1.z += local_velocity.z * subdelta;
   double double_step = 2 * subdelta;
-  double3 z_0 = positions[idx];
-  positions[idx] = z_1;
-  update_velocities(positions, velocities, masses, subdelta);
+  double3 z_0 = local_position;
+  local_position = z_1;
+  local_velocity = update_my_velocity_total(positions, velocities, masses, subdelta);
 
   // so now, we need to calculate z_(m+1) using z_(m-1)
   // we can store z_(m-1) in z_0 and z_(m+1) in z_1
@@ -284,29 +367,27 @@ __device__ PosVel modified_midpoint(double3 *positions, double3 *velocities, dou
   for (int i = 1; i < N; i++) {
     double3 temp;
     // here we are computing the new (m+1) position
-    temp.x = z_0.x + velocities[idx].x * double_step;
-    temp.y = z_0.y + velocities[idx].y * double_step;
-    temp.z = z_0.z + velocities[idx].z * double_step;
+    temp.x = z_0.x + local_velocity.x * double_step;
+    temp.y = z_0.y + local_velocity.y * double_step;
+    temp.z = z_0.z + local_velocity.z * double_step;
     // so we set this position to be the new z_0
     z_0 = z_1;
     z_1 = temp;
-    positions[idx] = z_1;
+    local_position = z_1;
     // update velocities
-    update_velocities(positions, velocities, masses, subdelta);
+    local_velocity = update_my_velocity_total(positions, velocities, masses, subdelta);
   }
 
   // final little bit
   double3 out;
-  out.x = 0.5 * (z_1.x + z_0.x + velocities[idx].x * subdelta);
-  out.y = 0.5 * (z_1.y + z_0.y + velocities[idx].y * subdelta);
-  out.z = 0.5 * (z_1.z + z_0.z + velocities[idx].z * subdelta);
+  out.x = 0.5 * (z_1.x + z_0.x + local_velocity.x * subdelta);
+  out.y = 0.5 * (z_1.y + z_0.y + local_velocity.y * subdelta);
+  out.z = 0.5 * (z_1.z + z_0.z + local_velocity.z * subdelta);
   PosVel res;
   // store final positions and velocities
   res.pos = out;
-  res.vel = velocities[idx];
+  res.vel = local_velocity;
   // restore velocities and positions
-  velocities[idx] = v;
-  positions[idx] = x;
   return res;
 }
 
@@ -323,14 +404,19 @@ __device__ bool is_converged(PosVel a_1, PosVel a_0) {
   return (mag_vel + mag_pos) < BULIRSCH_STOER_TOLERANCE;
 }
 
-__device__ void richardson_extrapolation(double3 *positions, double3 *velocities, double *masses, double dt) {
-  const int MAX_ROWS = 6;
+__device__ PosVel richardson_extrapolation(
+  const double3 *positions, 
+  const double3 *velocities, 
+  const double *masses, 
+  double dt
+  ) {
   int N = 1;
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  PosVel buffer[MAX_ROWS][MAX_ROWS];
+  PosVel out;
+  PosVel buffer[MAX_ROWS_RICHARDSON][MAX_ROWS_RICHARDSON];
   // for our first approx, we use the OG dt
   buffer[0][0] = modified_midpoint(positions, velocities, masses, dt, N);
-  for (int i = 1; i < MAX_ROWS; i++) {
+  for (int i = 1; i < MAX_ROWS_RICHARDSON; i++) {
     N = pow(2, i);
     buffer[i][0] = modified_midpoint(positions, velocities, masses, dt, N);
     for (int j = 1; j <= i; j++) {
@@ -358,14 +444,16 @@ __device__ void richardson_extrapolation(double3 *positions, double3 *velocities
     }
 
     if (is_converged(buffer[i][i], buffer[i - 1][i - 1])) {
-      positions[idx] = buffer[i][i].pos;
-      velocities[idx] = buffer[i][i].vel;
-      return;
+      out.pos = buffer[i][i].pos;
+      out.vel = buffer[i][i].vel;
+      return out;
     }
   }
 
-  positions[idx] = buffer[MAX_ROWS - 1][MAX_ROWS - 1].pos;
-  velocities[idx] = buffer[MAX_ROWS - 1][MAX_ROWS - 1].vel;
+  out.pos = buffer[MAX_ROWS_RICHARDSON - 1][MAX_ROWS_RICHARDSON - 1].pos;
+  out.vel = buffer[MAX_ROWS_RICHARDSON - 1][MAX_ROWS_RICHARDSON - 1].vel;
+  return out;
+
 }
 
 // this ensures that the sun is in a reference frame in which it is stationary
@@ -380,6 +468,9 @@ __device__ void convert_to_democratic_heliocentric_coordinates(double3 *position
     mass_weighted_v.y += masses[i + 1] * velocities[i].y;
     mass_weighted_v.z += masses[i + 1] * velocities[i].z;
   }
+
+  // prevent race condition, ensure all threads have finished reading old velocities
+  __syncthreads();
 
   double scaling_factor = 1.00 / (total_mass + masses[0]);
   mass_weighted_v.x *= scaling_factor;
@@ -402,7 +493,7 @@ __device__ bool close_encounter_p(double3 *positions, double3 *velocities, doubl
     r_ij.y = positions[i].y - positions[idx].y;
     r_ij.z = positions[i].z - positions[idx].z;
     double r_ij_mag = magnitude(r_ij);
-    double r_crit = fetch_r_crit(positions, velocities, masses, idx, i, dt);
+    double r_crit = fetch_r_crit(positions, velocities, masses, i, dt);
     if (r_ij_mag < r_crit) {
       return true;
     }
@@ -444,30 +535,55 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm, double 
   convert_to_democratic_heliocentric_coordinates(positions, velocities, masses);
 
   for (int i = 0; i < NUM_TIMESTEPS; i++) {
+    // first "kicks"
     __syncthreads();
-    body_interaction_kick(positions, velocities, masses, dt / 2.00);
+    double3 velocity_after_body_interaction = body_interaction_kick(positions, velocities, masses, dt / 2.00);
     __syncthreads();
-    main_body_kinetic(positions, velocities, masses, dt / 2.00);
+    velocities[idx] = velocity_after_body_interaction;
+    __syncthreads();
+    double3 position_after_main_body_kick = main_body_kinetic(positions, velocities, masses, dt / 2.00);
+    __syncthreads();
+    positions[idx] = position_after_main_body_kick;
+    __syncthreads();
     double semi_major_axis = vec_semi_major_axis[idx];
     double n = 1.00 / (semi_major_axis * semi_major_axis * semi_major_axis);
-    __syncthreads();
 
+    // SOLUTION TO MAIN (largest) HAMILTONIAN
     // if i am undergoing a close encounter with anyone
     // use bulirsch-stoer aka richardson extrapolation w/ mod midpoint
-    if (close_encounter_p(positions, velocities, masses, dt)) {
-      richardson_extrapolation(positions, velocities, masses, dt);
+    PosVel numerical_soln_to_close_encounter;
+    bool is_close_encounter = close_encounter_p(positions, velocities, masses, dt);
+    if (is_close_encounter) {
+      // directly updates positions and velocities by dt
+      numerical_soln_to_close_encounter = richardson_extrapolation(positions, velocities, masses, dt);
     } else {
+      // side-effect here: updates eccentric anomaly directly –– analytical soln to Kepler's equation, computed using a numerical root-finding algo
       elements_from_cartesian(positions, velocities, vec_inclination, vec_longitude_of_ascending_node, vec_argument_of_perihelion, vec_mean_anomaly, vec_eccentricity, vec_semi_major_axis);
       // advance mean anomaly, this is essentially advancing to the next timestep
       vec_mean_anomaly[idx] = fmod(n * dt + vec_mean_anomaly[idx], TWOPI);
       cartesian_from_elements(vec_inclination, vec_longitude_of_ascending_node, vec_argument_of_perihelion, vec_mean_anomaly, vec_eccentricity, vec_semi_major_axis, positions, velocities);
     }
 
+    // separating out calculation with update ensures that no race conditions occur
     __syncthreads();
-    main_body_kinetic(positions, velocities, masses, dt / 2.00);
+    double not_close_encounter = (1.00 - (double)is_close_encounter);
+    positions[idx].x = not_close_encounter * positions[idx].x + (double)is_close_encounter * numerical_soln_to_close_encounter.pos.x;
+    positions[idx].y = not_close_encounter * positions[idx].y + (double)is_close_encounter * numerical_soln_to_close_encounter.pos.y;
+    positions[idx].z = not_close_encounter * positions[idx].z + (double)is_close_encounter * numerical_soln_to_close_encounter.pos.z;
+    velocities[idx].x = not_close_encounter * velocities[idx].x + (double)is_close_encounter * numerical_soln_to_close_encounter.vel.x;
+    velocities[idx].y = not_close_encounter * velocities[idx].y + (double)is_close_encounter * numerical_soln_to_close_encounter.vel.y;
+    velocities[idx].z = not_close_encounter * velocities[idx].z + (double)is_close_encounter * numerical_soln_to_close_encounter.vel.z;
     __syncthreads();
-    body_interaction_kick(positions, velocities, masses, dt / 2.00);
 
+    // final "kicks"
+    __syncthreads();
+    position_after_main_body_kick = main_body_kinetic(positions, velocities, masses, dt / 2.00);
+    __syncthreads();
+    positions[idx] = position_after_main_body_kick;
+    __syncthreads();
+    velocity_after_body_interaction = body_interaction_kick(positions, velocities, masses, dt / 2.00);
+    __syncthreads();
+    velocities[idx] = velocity_after_body_interaction;
     // basically the layout here is:
     // [[body0, body1, body2, ...], [body0, body1, body2, ...], ...]
     // where each subarray is a timestep
