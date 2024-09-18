@@ -103,6 +103,7 @@ __device__ double fetch_r_crit(
       cbrt(masses[idx + 1] + masses[idx_other + 1] / 3.00) * (r1 + r2) / 2.00;
   double vmax = max(v1, v2);
   return max(n1 * mutual_hill_radius, n2 * vmax * dt);
+  // return 0.06;
 }
 
 __device__ KR_Crit changeover(const double3 *positions,
@@ -330,10 +331,9 @@ __device__ double3 update_my_velocity_total(const double3 *positions,
   */
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   const double3 my_position = positions[idx];
-  double3 my_velocity = velocities[idx];
   // the body interaction kick updates velocities based on the masses of all
   // minor bodies
-  body_interaction_kick(positions, velocities, masses, dt, true);
+  double3 my_velocity = body_interaction_kick(positions, velocities, masses, dt, true);
   // now for the main body:
   // update acceleration due to main body
   // a = - G * M / r^3 * r, which in this case simplifies to 1/(r^3) * r_vec
@@ -556,8 +556,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  int NUM_TIMESTEPS)
 {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  // declare buffers for positions in SRAM
-
+  // declare SRAM buffer
   extern __shared__ char total_memory[];
   double3 *positions = (double3 *)total_memory;
   double3 *velocities = (double3 *)(positions + blockDim.x);
