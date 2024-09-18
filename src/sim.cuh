@@ -422,8 +422,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm, double 
   double *vec_longitude_of_ascending_node = (double *)(vec_inclination + blockDim.x);
   double *vec_argument_of_perihelion = (double *)(vec_longitude_of_ascending_node + blockDim.x);
   double *vec_mean_anomaly = (double *)(vec_argument_of_perihelion + blockDim.x);
-  double *vec_eccentricity = (double *)(vec_mean_anomaly + blockDim.x);
-  double *vec_semi_major_axis = (double *)(vec_eccentricity + blockDim.x);
+  double *vec_eccentricity = (double *)(vec_mean_anomaly + blockDim.x) double *vec_semi_major_axis = (double *)(vec_eccentricity + blockDim.x);
 
   // copy data to shared memory
   // special case to avoid race condition
@@ -437,10 +436,8 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm, double 
   vec_semi_major_axis[idx] = vec_semi_major_axis_hbm[idx];
   vec_inclination[idx] = vec_inclination_hbm[idx];
   vec_longitude_of_ascending_node[idx] = vec_longitude_of_ascending_node_hbm[idx];
-  __syncthreads();
   // initially populate positions and velocities
   cartesian_from_elements(vec_inclination, vec_longitude_of_ascending_node, vec_argument_of_perihelion, vec_mean_anomaly, vec_eccentricity, vec_semi_major_axis, positions, velocities);
-
   __syncthreads();
   // convert to democratic heliocentric coordinates
   convert_to_democratic_heliocentric_coordinates(positions, velocities, masses);
@@ -476,7 +473,6 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm, double 
     // so we need to index into the timestep and then add idx to index a
     // particular body
     output_positions[i * blockDim.x + idx] = positions[idx];
-    __syncthreads();
   }
 }
 
