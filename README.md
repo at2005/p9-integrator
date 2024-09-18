@@ -2,8 +2,6 @@
 
 Right now not trying to make this efficient, just trying to make it not blow up the solar system.
 
-Currently in-progress: Generating TNO sim config.
-
 Note: Units are such that G=1, ie mass is in solar masses, distance is in AU, time is in years, etc.
 
 ## Compiling
@@ -14,7 +12,7 @@ To compile, run `make` in the root directory. This will create a binary in the `
 
 Run the binary on a GPU node using `./bin/mint` with a set of command line arguments:
 
-- `-c` specifies the path to the JSON config file. For an example of what this should look like, check out examples/test.json
+- `-c` specifies the path to the JSON config file. For an example of what this should look like, check out the examples directory
 
 ### Optional:
 
