@@ -1,0 +1,304 @@
+{
+    "bodies": [
+        {
+            "name": "Small-Body-0",
+            "mass": 2.2165978105185694e-08,
+            "semi_major_axis": 0.5,
+            "eccentricity": 0.0,
+            "inclination": 0,
+            "longitude_of_ascending_node": 1.835527115544005,
+            "argument_of_perihelion": 1.9977722016254622,
+            "mean_anomaly": 4.400163329364153
+        },
+        {
+            "name": "Small-Body-1",
+            "mass": 4.145037920464235e-08,
+            "semi_major_axis": 0.5233333333333333,
+            "eccentricity": 0.0003333333333333333,
+            "inclination": 0,
+            "longitude_of_ascending_node": 2.7353721548262926,
+            "argument_of_perihelion": 4.927254124487435,
+            "mean_anomaly": 3.482194264721684
+        },
+        {
+            "name": "Small-Body-2",
+            "mass": 6.0734780304099e-08,
+            "semi_major_axis": 0.5466666666666666,
+            "eccentricity": 0.0006666666666666666,
+            "inclination": 0,
+            "longitude_of_ascending_node": 3.9093376247524456,
+            "argument_of_perihelion": 0.49352164498443285,
+            "mean_anomaly": 0.28966823960534444
+        },
+        {
+            "name": "Small-Body-3",
+            "mass": 8.001918140355566e-08,
+            "semi_major_axis": 0.57,
+            "eccentricity": 0.001,
+            "inclination": 0,
+            "longitude_of_ascending_node": 4.949306214312076,
+            "argument_of_perihelion": 3.4230983919134617,
+            "mean_anomaly": 2.36956257638365
+        },
+        {
+            "name": "Small-Body-4",
+            "mass": 9.930358250301231e-08,
+            "semi_major_axis": 0.5933333333333333,
+            "eccentricity": 0.0013333333333333333,
+            "inclination": 0,
+            "longitude_of_ascending_node": 3.93066660371495,
+            "argument_of_perihelion": 5.6258938336530555,
+            "mean_anomaly": 2.0970804485405554
+        },
+        {
+            "name": "Small-Body-5",
+            "mass": 1.1858798360246896e-07,
+            "semi_major_axis": 0.6166666666666667,
+            "eccentricity": 0.0016666666666666666,
+            "inclination": 0,
+            "longitude_of_ascending_node": 4.49390987955045,
+            "argument_of_perihelion": 4.641997639826526,
+            "mean_anomaly": 5.899306203152537
+        },
+        {
+            "name": "Small-Body-6",
+            "mass": 1.3787238470192564e-07,
+            "semi_major_axis": 0.64,
+            "eccentricity": 0.002,
+            "inclination": 0,
+            "longitude_of_ascending_node": 1.167516338055147,
+            "argument_of_perihelion": 0.8848327128393132,
+            "mean_anomaly": 3.831976182715231
+        },
+        {
+            "name": "Small-Body-7",
+            "mass": 1.571567858013823e-07,
+            "semi_major_axis": 0.6633333333333333,
+            "eccentricity": 0.002333333333333333,
+            "inclination": 0,
+            "longitude_of_ascending_node": 2.0105607902592406,
+            "argument_of_perihelion": 5.285358843985794,
+            "mean_anomaly": 0.8596827830779215
+        },
+        {
+            "name": "Small-Body-8",
+            "mass": 1.7644118690083894e-07,
+            "semi_major_axis": 0.6866666666666666,
+            "eccentricity": 0.0026666666666666666,
+            "inclination": 0,
+            "longitude_of_ascending_node": 1.000373438833491,
+            "argument_of_perihelion": 2.721179384215486,
+            "mean_anomaly": 4.049367234009981
+        },
+        {
+            "name": "Small-Body-9",
+            "mass": 1.957255880002956e-07,
+            "semi_major_axis": 0.71,
+            "eccentricity": 0.003,
+            "inclination": 0,
+            "longitude_of_ascending_node": 4.251607287573812,
+            "argument_of_perihelion": 5.151387063413946,
+            "mean_anomaly": 3.607610870135194
+        },
+        {
+            "name": "Small-Body-10",
+            "mass": 2.1500998909975224e-07,
+            "semi_major_axis": 0.7333333333333333,
+            "eccentricity": 0.003333333333333333,
+            "inclination": 0,
+            "longitude_of_ascending_node": 1.0621964530355903,
+            "argument_of_perihelion": 1.2407492443578538,
+            "mean_anomaly": 3.7444401171976125
+        },
+        {
+            "name": "Small-Body-11",
+            "mass": 2.342943901992089e-07,
+            "semi_major_axis": 0.7566666666666666,
+            "eccentricity": 0.0036666666666666666,
+            "inclination": 0,
+            "longitude_of_ascending_node": 3.7057304231668473,
+            "argument_of_perihelion": 4.218768588397929,
+            "mean_anomaly": 1.5657714930910844
+        },
+        {
+            "name": "Small-Body-12",
+            "mass": 2.5357879129866554e-07,
+            "semi_major_axis": 0.78,
+            "eccentricity": 0.004,
+            "inclination": 0,
+            "longitude_of_ascending_node": 1.462324810202049,
+            "argument_of_perihelion": 1.9931664807089557,
+            "mean_anomaly": 5.69187246906272
+        },
+        {
+            "name": "Small-Body-13",
+            "mass": 2.7286319239812217e-07,
+            "semi_major_axis": 0.8033333333333332,
+            "eccentricity": 0.004333333333333333,
+            "inclination": 0,
+            "longitude_of_ascending_node": 2.75386130308442,
+            "argument_of_perihelion": 3.1222510080968204,
+            "mean_anomaly": 2.1463150053225157
+        },
+        {
+            "name": "Small-Body-14",
+            "mass": 2.9214759349757885e-07,
+            "semi_major_axis": 0.8266666666666667,
+            "eccentricity": 0.004666666666666666,
+            "inclination": 0,
+            "longitude_of_ascending_node": 0.6555344299659834,
+            "argument_of_perihelion": 1.9519625058169776,
+            "mean_anomaly": 4.425502882800622
+        },
+        {
+            "name": "Small-Body-15",
+            "mass": 3.1143199459703547e-07,
+            "semi_major_axis": 0.85,
+            "eccentricity": 0.005,
+            "inclination": 0,
+            "longitude_of_ascending_node": 2.242330850193379,
+            "argument_of_perihelion": 0.6876619336519426,
+            "mean_anomaly": 0.5947217351932432
+        },
+        {
+            "name": "Small-Body-16",
+            "mass": 3.3071639569649215e-07,
+            "semi_major_axis": 0.8733333333333333,
+            "eccentricity": 0.005333333333333333,
+            "inclination": 0,
+            "longitude_of_ascending_node": 1.7333165040584866,
+            "argument_of_perihelion": 2.582666737419827,
+            "mean_anomaly": 4.683301525963334
+        },
+        {
+            "name": "Small-Body-17",
+            "mass": 3.5000079679594883e-07,
+            "semi_major_axis": 0.8966666666666666,
+            "eccentricity": 0.005666666666666666,
+            "inclination": 0,
+            "longitude_of_ascending_node": 1.8666186737633486,
+            "argument_of_perihelion": 4.5721400410009885,
+            "mean_anomaly": 0.5478738428474065
+        },
+        {
+            "name": "Small-Body-18",
+            "mass": 3.6928519789540545e-07,
+            "semi_major_axis": 0.9199999999999999,
+            "eccentricity": 0.006,
+            "inclination": 0,
+            "longitude_of_ascending_node": 5.073868313130527,
+            "argument_of_perihelion": 2.8929218244459287,
+            "mean_anomaly": 3.685929867157757
+        },
+        {
+            "name": "Small-Body-19",
+            "mass": 3.8856959899486213e-07,
+            "semi_major_axis": 0.9433333333333334,
+            "eccentricity": 0.006333333333333333,
+            "inclination": 0,
+            "longitude_of_ascending_node": 5.2324584273142944,
+            "argument_of_perihelion": 3.545405536319344,
+            "mean_anomaly": 6.1895633370950875
+        },
+        {
+            "name": "Small-Body-20",
+            "mass": 4.0785400009431875e-07,
+            "semi_major_axis": 0.9666666666666666,
+            "eccentricity": 0.006666666666666666,
+            "inclination": 0,
+            "longitude_of_ascending_node": 5.437047452797948,
+            "argument_of_perihelion": 4.651032055152556,
+            "mean_anomaly": 5.597382337442436
+        },
+        {
+            "name": "Small-Body-21",
+            "mass": 4.2713840119377543e-07,
+            "semi_major_axis": 0.99,
+            "eccentricity": 0.007,
+            "inclination": 0,
+            "longitude_of_ascending_node": 0.27783828598044513,
+            "argument_of_perihelion": 1.784875483734106,
+            "mean_anomaly": 3.5622251159669176
+        },
+        {
+            "name": "Small-Body-22",
+            "mass": 4.4642280229323206e-07,
+            "semi_major_axis": 1.0133333333333332,
+            "eccentricity": 0.007333333333333333,
+            "inclination": 0,
+            "longitude_of_ascending_node": 4.8413013690196465,
+            "argument_of_perihelion": 3.5447157363806823,
+            "mean_anomaly": 2.1993180029561903
+        },
+        {
+            "name": "Small-Body-23",
+            "mass": 4.6570720339268873e-07,
+            "semi_major_axis": 1.0366666666666666,
+            "eccentricity": 0.007666666666666666,
+            "inclination": 0,
+            "longitude_of_ascending_node": 1.6750075537818137,
+            "argument_of_perihelion": 2.448816907019359,
+            "mean_anomaly": 0.3248425648048268
+        },
+        {
+            "name": "Small-Body-24",
+            "mass": 4.849916044921455e-07,
+            "semi_major_axis": 1.06,
+            "eccentricity": 0.008,
+            "inclination": 0,
+            "longitude_of_ascending_node": 3.8785941364484366,
+            "argument_of_perihelion": 6.221159404427019,
+            "mean_anomaly": 1.880395570403558
+        },
+        {
+            "name": "Small-Body-25",
+            "mass": 5.042760055916021e-07,
+            "semi_major_axis": 1.0833333333333333,
+            "eccentricity": 0.008333333333333333,
+            "inclination": 0,
+            "longitude_of_ascending_node": 6.2345786969125845,
+            "argument_of_perihelion": 2.628017522097559,
+            "mean_anomaly": 0.7844241204997746
+        },
+        {
+            "name": "Small-Body-26",
+            "mass": 5.235604066910587e-07,
+            "semi_major_axis": 1.1066666666666665,
+            "eccentricity": 0.008666666666666666,
+            "inclination": 0,
+            "longitude_of_ascending_node": 2.268035951722794,
+            "argument_of_perihelion": 5.9120810036290345,
+            "mean_anomaly": 2.7349094932527134
+        },
+        {
+            "name": "Small-Body-27",
+            "mass": 5.428448077905154e-07,
+            "semi_major_axis": 1.13,
+            "eccentricity": 0.009,
+            "inclination": 0,
+            "longitude_of_ascending_node": 1.49261898206952,
+            "argument_of_perihelion": 5.298984010087556,
+            "mean_anomaly": 1.5388354254575267
+        },
+        {
+            "name": "Small-Body-28",
+            "mass": 5.621292088899721e-07,
+            "semi_major_axis": 1.1533333333333333,
+            "eccentricity": 0.009333333333333332,
+            "inclination": 0,
+            "longitude_of_ascending_node": 0.9027925973947348,
+            "argument_of_perihelion": 4.12070048976684,
+            "mean_anomaly": 5.302244713488932
+        },
+        {
+            "name": "Small-Body-29",
+            "mass": 5.814136099894287e-07,
+            "semi_major_axis": 1.1766666666666667,
+            "eccentricity": 0.009666666666666667,
+            "inclination": 0,
+            "longitude_of_ascending_node": 3.946433661468956,
+            "argument_of_perihelion": 4.886950809894778,
+            "mean_anomaly": 2.1689511187511483
+        }
+    ]
+}
