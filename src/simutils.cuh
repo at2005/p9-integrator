@@ -47,6 +47,12 @@ struct PosVel
   double3 vel;
 };
 
+struct KR_Crit
+{
+  double r_crit;
+  double K;
+};
+
 __host__ void initialize_std_sim(Sim *sim, int num_bodies, int num_timesteps)
 {
   sim->vec_inclination = (double *)malloc(num_bodies * sizeof(double));

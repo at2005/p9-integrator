@@ -2,6 +2,7 @@
 #ifndef __SIM_CUH__
 #define __SIM_CUH__
 #include "constants.cuh"
+#include "simutils.cuh"
 
 /*
 This file contains the core numerical integration kernel and associated helper
@@ -103,12 +104,6 @@ __device__ double fetch_r_crit(
   double vmax = max(v1, v2);
   return max(n1 * mutual_hill_radius, n2 * vmax * dt);
 }
-
-struct KR_Crit
-{
-  double r_crit;
-  double K;
-};
 
 __device__ KR_Crit changeover(const double3 *positions,
                               const double3 *velocities,
@@ -357,12 +352,6 @@ __device__ double3 update_my_velocity_total(const double3 *positions,
   return my_velocity;
 }
 
-struct PosVel
-{
-  double3 pos;
-  double3 vel;
-};
-
 __device__ PosVel modified_midpoint(const double3 *positions,
                                     const double3 *velocities,
                                     const double *masses,
@@ -447,7 +436,6 @@ __device__ PosVel richardson_extrapolation(const double3 *positions,
                                            double dt)
 {
   int N = 1;
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
   PosVel out;
   PosVel buffer[MAX_ROWS_RICHARDSON][MAX_ROWS_RICHARDSON];
   // for our first approx, we use the OG dt
