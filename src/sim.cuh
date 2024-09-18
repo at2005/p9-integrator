@@ -61,17 +61,20 @@ __device__ double danby_burkardt(double mean_anomaly, double eccentricity) {
 }
 
 __device__ double fetch_r_crit(double3 *positions, double3 *velocities, double *masses, int idx1, int idx2, double dt) {
-  // anywhere between 3-10
-  double n1 = 6.50;
-  // anywhere between 0.3-2.0
-  double n2 = 1.15;
-  double r1 = magnitude(positions[idx1]);
-  double r2 = magnitude(positions[idx2]);
-  double v1 = magnitude(velocities[idx1]);
-  double v2 = magnitude(velocities[idx2]);
-  double mutual_hill_radius = cbrt(masses[idx1] + masses[idx2] / 3.00) * (r1 + r2) / 2.00;
-  double vmax = max(v1, v2);
-  return max(n1 * mutual_hill_radius, n2 * vmax * dt);
+  // // anywhere between 3-10
+  // double n1 = 6.50;
+  // // anywhere between 0.3-2.0
+  // double n2 = 1.15;
+  // double r1 = magnitude(positions[idx1]);
+  // double r2 = magnitude(positions[idx2]);
+  // double v1 = magnitude(velocities[idx1]);
+  // double v2 = magnitude(velocities[idx2]);
+  // double mutual_hill_radius = cbrt(masses[idx1] + masses[idx2] / 3.00) * (r1 + r2) / 2.00;
+  // double vmax = max(v1, v2);
+  // return max(n1 * mutual_hill_radius, n2 * vmax * dt);
+  
+  // for now let's just keep this hardcoded lol
+  return 0.06;
 }
 
 __device__ double changeover(double3 *positions, double3 *velocities, double *masses, double r_ij, int idx1, int idx2, double dt) {
@@ -192,7 +195,7 @@ __device__ void body_interaction_kick(double3 *positions, double3 *velocities, d
 
     // add smoothing constant
     double r_sq = r*r;
-    r_sq += SMOOTHING_CONSTANT;
+    r_sq += SMOOTHING_CONSTANT * SMOOTHING_CONSTANT;
     double force_denom = r_sq * r;
 
     double weighted_acceleration = changeover_weight * masses[i + 1] / force_denom;
@@ -240,7 +243,7 @@ __device__ void update_velocities(double3 *positions, double3 *velocities, doubl
   double r_sq = magnitude_squared(z_1);
   double r = stable_sqrt(r_sq);
   // add smoothing constant
-  r_sq += SMOOTHING_CONSTANT;
+  r_sq += SMOOTHING_CONSTANT * SMOOTHING_CONSTANT;
   double force_denom = r_sq * r;
   double3 r_vec = make_double3(z_1.x / force_denom, z_1.y / force_denom, z_1.z / force_denom);
   // negative bc directed inwards
@@ -455,11 +458,10 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm, double 
       richardson_extrapolation(positions, velocities, masses, dt);
     } else {
       elements_from_cartesian(positions, velocities, vec_inclination, vec_longitude_of_ascending_node, vec_argument_of_perihelion, vec_mean_anomaly, vec_eccentricity, vec_semi_major_axis);
+      // advance mean anomaly, this is essentially advancing to the next timestep
+      vec_mean_anomaly[idx] = fmod(n * dt + vec_mean_anomaly[idx], TWOPI);
     }
-    __syncthreads();
-    // // advance mean anomaly, this is essentially advancing to the next
-    // timestep
-    vec_mean_anomaly[idx] = fmod(n * dt + vec_mean_anomaly[idx], TWOPI);
+
     __syncthreads();
     cartesian_from_elements(vec_inclination, vec_longitude_of_ascending_node, vec_argument_of_perihelion, vec_mean_anomaly, vec_eccentricity, vec_semi_major_axis, positions, velocities);
 

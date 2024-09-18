@@ -14,7 +14,8 @@ __host__ int main(int argc, char **argv) {
   sim_from_config_file(&sim, config_file, NUM_TIMESTEPS);
 
   // set integration timestep to the one BB21 use
-  double dt = 0.8219;
+  // double dt = 0.8219;
+  double dt = 5 / 365;
 
   // this is bc we need to allocate memory on the device (on HBM – global
   // memory, copy to SRAM later)
