@@ -422,7 +422,8 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm, double 
   double *vec_longitude_of_ascending_node = (double *)(vec_inclination + blockDim.x);
   double *vec_argument_of_perihelion = (double *)(vec_longitude_of_ascending_node + blockDim.x);
   double *vec_mean_anomaly = (double *)(vec_argument_of_perihelion + blockDim.x);
-  double *vec_eccentricity = (double *)(vec_mean_anomaly + blockDim.x) double *vec_semi_major_axis = (double *)(vec_eccentricity + blockDim.x);
+  double *vec_eccentricity = (double *)(vec_mean_anomaly + blockDim.x);
+  double *vec_semi_major_axis = (double *)(vec_eccentricity + blockDim.x);
 
   // copy data to shared memory
   // special case to avoid race condition
