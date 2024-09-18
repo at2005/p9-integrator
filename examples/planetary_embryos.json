@@ -4,7 +4,7 @@
             "name": "Small-Body-0",
             "mass": 2.2165978105185694e-08,
             "semi_major_axis": 0.5,
-            "eccentricity": 0.0,
+            "eccentricity": 0.01,
             "inclination": 0,
             "longitude_of_ascending_node": 1.835527115544005,
             "argument_of_perihelion": 1.9977722016254622,

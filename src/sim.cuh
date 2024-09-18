@@ -179,7 +179,6 @@ __device__ void body_interaction_kick(double3 *positions, double3 *velocities, d
     dist_x = positions[i].x - positions[idx].x;
     dist_y = positions[i].y - positions[idx].y;
     dist_z = positions[i].z - positions[idx].z;
-    double epsilon = 1e-8;
     double r = stable_sqrt(dist_x * dist_x + dist_y * dist_y + dist_z * dist_z);
     // // magnitude of acceleration = mass_of_other_body * G / |r|^3
     double changeover_weight = changeover(positions, velocities, masses, r, i, idx, dt);
@@ -191,7 +190,12 @@ __device__ void body_interaction_kick(double3 *positions, double3 *velocities, d
       }
     }
 
-    double weighted_acceleration = changeover_weight * masses[i + 1] / pow(r + epsilon, 3);
+    // add smoothing constant
+    double r_sq = r*r;
+    r_sq += SMOOTHING_CONSTANT;
+    double force_denom = r_sq * r;
+
+    double weighted_acceleration = changeover_weight * masses[i + 1] / force_denom;
     // // accumulate total acceleration due to all bodies, except self
     acc.x += weighted_acceleration * dist_x;
     acc.y += weighted_acceleration * dist_y;
@@ -233,8 +237,12 @@ __device__ void update_velocities(double3 *positions, double3 *velocities, doubl
   // update acceleration due to main body
   // a = - G * M / r^3 * r, which in this case simplifies to 1/(r^3) * r_vec
   double3 z_1 = positions[idx];
-  double r = magnitude(z_1);
-  double3 r_vec = make_double3(z_1.x / pow(r, 3), z_1.y / pow(r, 3), z_1.z / pow(r, 3));
+  double r_sq = magnitude_squared(z_1);
+  double r = stable_sqrt(r_sq);
+  // add smoothing constant
+  r_sq += SMOOTHING_CONSTANT;
+  double force_denom = r_sq * r;
+  double3 r_vec = make_double3(z_1.x / force_denom, z_1.y / force_denom, z_1.z / force_denom);
   // negative bc directed inwards
   velocities[idx].x -= r_vec.x * dt;
   velocities[idx].y -= r_vec.y * dt;
