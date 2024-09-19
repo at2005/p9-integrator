@@ -56,6 +56,65 @@ def tno_setup_config():
         "bodies": []
     }
 
+    # adding Planet Nine under hypothetical elements
+    config_dict["bodies"].append({
+        "name": "Planet Nine",
+        # five earth masses
+        "mass": 5 * 3.00338e-06,
+        "semi_major_axis": 500,
+        "eccentricity":  0.25,
+        "inclination": np.radians(20),
+        "longitude_of_ascending_node": np.radians(86),
+        "argument_of_perihelion": np.radians(138),
+        "mean_anomaly": np.radians(-176.2)
+    })
+
+    # adding 4 gas giants
+    config_dict["bodies"].append({
+        "name": "Neptune",
+        "mass": 5.14855965e-5,
+        "semi_major_axis": 30.06896348,
+        "eccentricity" :0.00858587,
+        "inclination" : np.radians(1.76917),
+        "longitude_of_ascending_node" : np.radians(131.72169),
+        "argument_of_perihelion" : np.radians(-86.75034),
+        "mean_anomaly" : 0.00
+    })
+
+
+    config_dict["bodies"].append({
+        "name": "Uranus",
+        "mass": 4.36430044e-5,
+        "semi_major_axis": 19.19126393,
+        "eccentricity" : 0.04716771,
+        "inclination" : np.radians(0.76986),
+        "longitude_of_ascending_node" : np.radians(74.22988),
+        "argument_of_perihelion" : np.radians(-96.73436),
+        "mean_anomaly" : 0.00
+    })
+
+    config_dict["bodies"].append({
+        "name" : "Saturn",
+        "mass": 0.000285716656,
+        "semi_major_axis": 9.53707032,
+        "eccentricity": 0.05415060,
+        "inclination": np.radians(2.48446),
+        "longitude_of_ascending_node": np.radians(113.71504),
+        "argument_of_perihelion": np.radians(-21.2831),
+        "mean_anomaly": 0.00
+    })
+
+    config_dict["bodies"].append({
+        "name" : "Jupiter",
+        "mass": 0.000954588,
+        "semi_major_axis": 5.20336301,
+        "eccentricity": 0.04839266,
+        "inclination": np.radians(1.30530),
+        "longitude_of_ascending_node": np.radians(100.55615),
+        "argument_of_perihelion": np.radians(-85.8023),
+        "mean_anomaly": 0.00
+    })
+
     for i in range(num_bodies):
         config_dict["bodies"].append({
         "name": f"TNO-{i}",
