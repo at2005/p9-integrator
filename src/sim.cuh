@@ -6,8 +6,7 @@
 
 /*
 This file contains the core numerical integration kernel and associated helper
-functions for my implementation of the Mercury N-body Integrator. Note: A key
-goal here is to minimise branching. However, it's not entirely escapable.
+functions for my implementation of the Mercury N-body Integrator.
 */
 
 __device__ double3 cross(const double3 &a, const double3 &b)
@@ -91,19 +90,19 @@ __device__ double fetch_r_crit(
     double dt)
 {
   // anywhere between 3-10
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  double n1 = 3.50;
-  // anywhere between 0.3-2.0
-  double n2 = 2;
-  double r1 = magnitude(positions[idx]);
-  double r2 = magnitude(positions[idx_other]);
-  double v1 = magnitude(velocities[idx]);
-  double v2 = magnitude(velocities[idx_other]);
-  double mutual_hill_radius =
-      cbrt(masses[idx + 1] + masses[idx_other + 1] / 3.00) * (r1 + r2) / 2.00;
-  double vmax = max(v1, v2);
-  return max(n1 * mutual_hill_radius, n2 * vmax * dt);
-  // return 0.06;
+  // int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  // double n1 = 3.50;
+  // // anywhere between 0.3-2.0
+  // double n2 = 2;
+  // double r1 = magnitude(positions[idx]);
+  // double r2 = magnitude(positions[idx_other]);
+  // double v1 = magnitude(velocities[idx]);
+  // double v2 = magnitude(velocities[idx_other]);
+  // double mutual_hill_radius =
+  //     cbrt(masses[idx + 1] + masses[idx_other + 1] / 3.00) * (r1 + r2) / 2.00;
+  // double vmax = max(v1, v2);
+  // return max(n1 * mutual_hill_radius, n2 * vmax * dt);
+  return 0.06;
 }
 
 __device__ KR_Crit changeover(const double3 *positions,
@@ -197,32 +196,51 @@ __device__ void elements_from_cartesian(double3 *current_positions,
   double epsilon = 1e-8;
   double h_sq = magnitude_squared(angular_momentum) + epsilon;
   double inclination = stable_acos(angular_momentum.z / stable_sqrt(h_sq));
-  // TODO: find way to do this without branching
-  double longitude_of_ascending_node =
-      atan2(angular_momentum.x, -angular_momentum.y);
+  double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y);
+
   double v_sq = magnitude_squared(current_v);
   double r = magnitude(current_p);
   double s = h_sq;
   double eccentricity = stable_sqrt(1 + s * (v_sq - (2.00 / r)));
   double perihelion_distance = s / (1.00 + eccentricity);
 
-  double cos_E_anomaly_denom = eccentricity;
-  double cos_E_anomaly = (v_sq * r - 1) / cos_E_anomaly_denom;
-  double E_anomaly = stable_acos(cos_E_anomaly);
-  double M_anomaly = E_anomaly - eccentricity * sin(E_anomaly);
-  double cos_f = (s - r) / (eccentricity * r);
-  double f = stable_acos(cos_f);
-
+  // true longitude
   double cos_i = cos(inclination);
-  double to = -angular_momentum.x / angular_momentum.y;
-  double temp = (1.00 - cos_i) * to;
-  double temp2 = to * to;
-  double true_longitude =
-      atan2((current_p.y * (1.00 + temp2 * cos_i) - current_p.x * temp),
-            (current_p.x * (temp2 + cos_i) - current_p.y * temp));
+  double true_longitude;
+  if (angular_momentum.y != 0)
+  {
+    double to = -angular_momentum.x / angular_momentum.y;
+    double temp = (1.00 - cos_i) * to;
+    double temp2 = to * to;
+    true_longitude =
+        atan2((current_p.y * (1.00 + temp2 * cos_i) - current_p.x * temp),
+              (current_p.x * (temp2 + cos_i) - current_p.y * temp));
+  }
+  else
+  {
+    true_longitude = atan2(current_p.y * cos_i, current_p.x);
+  }
 
-  double p = true_longitude - f;
-  p = fmod(p + TWOPI + TWOPI, TWOPI);
+  // mean anomaly and longitude of perihelion
+  double p;
+  double M_anomaly;
+  if (eccentricity < 1e-8)
+  {
+    p = 0;
+    M_anomaly = true_longitude;
+  }
+  else
+  {
+    double cos_E_anomaly = (v_sq * r - 1) / eccentricity;
+    double E_anomaly = stable_acos(cos_E_anomaly);
+    M_anomaly = E_anomaly - eccentricity * sin(E_anomaly);
+    double cos_f = (s - r) / (eccentricity * r);
+    double f = stable_acos(cos_f);
+    p = true_longitude - f;
+    p = fmod(p + TWOPI + TWOPI, TWOPI);
+  }
+
+  // argument of perihelion
   double argument_of_perihelion = p - longitude_of_ascending_node;
   double semi_major_axis = perihelion_distance / (1.00 - eccentricity);
 
@@ -281,7 +299,7 @@ __device__ double3 body_interaction_kick(
     double force_denom = r_sq * r;
 
     double weighted_acceleration =
-        changeover_weight * masses[i + 1] / force_denom;
+        masses[i + 1] / force_denom;
     // // accumulate total acceleration due to all bodies, except self
     acc.x += weighted_acceleration * dist.x;
     acc.y += weighted_acceleration * dist.y;
@@ -610,6 +628,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     __syncthreads();
     positions[idx] = position_after_main_body_kick;
     __syncthreads();
+
     double semi_major_axis = vec_semi_major_axis[idx];
     double n = 1.00 / (semi_major_axis * semi_major_axis * semi_major_axis);
 
@@ -685,6 +704,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
         body_interaction_kick(positions, velocities, masses, dt / 2.00);
     __syncthreads();
     velocities[idx] = velocity_after_body_interaction;
+
     // basically the layout here is:
     // [[body0, body1, body2, ...], [body0, body1, body2, ...], ...]
     // where each subarray is a timestep
