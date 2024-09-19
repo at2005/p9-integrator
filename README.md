@@ -1,6 +1,6 @@
 # A CUDA implementation of the Mercury N-body Integrator for use on GPU Supercomputing Clusters
 
-Right now not trying to make this efficient, just trying to make it not blow up the solar system.
+TODO: optimize the hell out of this.
 
 Note: Units are such that G=1, ie mass is in solar masses, distance is in AU, time is in years, etc.
 
