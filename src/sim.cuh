@@ -90,19 +90,18 @@ __device__ double fetch_r_crit(
     double dt)
 {
   // anywhere between 3-10
-  // int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  // double n1 = 3.50;
-  // // anywhere between 0.3-2.0
-  // double n2 = 2;
-  // double r1 = magnitude(positions[idx]);
-  // double r2 = magnitude(positions[idx_other]);
-  // double v1 = magnitude(velocities[idx]);
-  // double v2 = magnitude(velocities[idx_other]);
-  // double mutual_hill_radius =
-  //     cbrt(masses[idx + 1] + masses[idx_other + 1] / 3.00) * (r1 + r2) / 2.00;
-  // double vmax = max(v1, v2);
-  // return max(n1 * mutual_hill_radius, n2 * vmax * dt);
-  return 0.06;
+  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  double n1 = 3.50;
+  // anywhere between 0.3-2.0
+  double n2 = 2;
+  double r1 = magnitude(positions[idx]);
+  double r2 = magnitude(positions[idx_other]);
+  double v1 = magnitude(velocities[idx]);
+  double v2 = magnitude(velocities[idx_other]);
+  double mutual_hill_radius =
+      cbrt(masses[idx + 1] + masses[idx_other + 1] / 3.00) * (r1 + r2) / 2.00;
+  double vmax = max(v1, v2);
+  return max(n1 * mutual_hill_radius, n2 * vmax * dt);
 }
 
 __device__ KR_Crit changeover(const double3 *positions,
