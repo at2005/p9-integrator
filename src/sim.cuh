@@ -299,7 +299,7 @@ __device__ double3 body_interaction_kick(
     double force_denom = r_sq * r;
 
     double weighted_acceleration =
-        masses[i + 1] / force_denom;
+        changeover_weight * masses[i + 1] / force_denom;
     // // accumulate total acceleration due to all bodies, except self
     acc.x += weighted_acceleration * dist.x;
     acc.y += weighted_acceleration * dist.y;
