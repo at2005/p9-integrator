@@ -35,7 +35,7 @@ def planetesimal_setup_config():
         json.dump(config_dict, f, indent=4) 
 
 
-def tno_setup_config():
+def p9_setup_config():
     """
     Generates a JSON config file for TNOs as described in
     https://arxiv.org/pdf/2108.09868
@@ -127,5 +127,8 @@ def tno_setup_config():
         "mean_anomaly": np.random.uniform(0, 2*np.pi)
         })
 
-    with open("../examples/tno_system.json", "w") as f:
+    with open("../examples/p9.json", "w") as f:
         json.dump(config_dict, f, indent=4) 
+
+
+p9_setup_config()
