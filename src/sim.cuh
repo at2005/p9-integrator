@@ -65,11 +65,14 @@ __device__ double danby_burkardt(double mean_anomaly, double eccentricity)
     double f_prime = 1 - e_cos;
     double dE = -f / f_prime;
     dE = -f / (f_prime + dE * e_sin / 2.00);
-    // quartic convergence
-    dE = -f / ((f_prime + dE * e_sin / 2.00) + (dE * dE * e_cos / 6.00));
-    // quintic convergence
-    dE = -f / ((f_prime + dE * e_sin / 2.00) + (dE * dE * e_cos / 6.00) -
-               (dE * dE * dE * e_sin / 24.00));
+    // higher order convergence only near the end
+    if i > MAX_ITERATIONS_ROOT_FINDING - 3 {
+      // quartic convergence
+      dE = -f / ((f_prime + dE * e_sin / 2.00) + (dE * dE * e_cos / 6.00));
+      // quintic convergence
+      dE = -f / ((f_prime + dE * e_sin / 2.00) + (dE * dE * e_cos / 6.00) -
+                (dE * dE * dE * e_sin / 24.00));
+    }
     E += dE;
   }
 
@@ -224,7 +227,7 @@ __device__ void elements_from_cartesian(double3 *current_positions,
   // mean anomaly and longitude of perihelion
   double p;
   double M_anomaly;
-  if (eccentricity < 1e-8)
+  if (eccentricity < epsilon)
   {
     p = 0;
     M_anomaly = true_longitude;

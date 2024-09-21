@@ -64,7 +64,7 @@
         {
             "name": "TNO-534",
             "mass": 0,
-            "semi_major_axis": 332.51953125,
+            "semi_major_axis": 370.51953125,
             "eccentricity": 0.05214843749999999,
             "inclination": 0.2275404835363701,
             "longitude_of_ascending_node": 2.850176679712519,
@@ -80,7 +80,257 @@
             "longitude_of_ascending_node": 3.6714537667828204,
             "argument_of_perihelion": 1.8031214890027447,
             "mean_anomaly": 4.490830419131149
-        }
+        },
 
+                    {"name": "TNO-904",
+            "mass": 0,
+            "semi_major_axis": 458.984375,
+            "eccentricity": 0.08828124999999998,
+            "inclination": 0.385199620069061,
+            "longitude_of_ascending_node": 2.543367984881355,
+            "argument_of_perihelion": 0.4592957914242043,
+            "mean_anomaly": 4.729296847984288
+        },
+        {
+            "name": "TNO-905",
+            "mass": 0,
+            "semi_major_axis": 459.326171875,
+            "eccentricity": 0.08837890624999999,
+            "inclination": 0.3856257258434737,
+            "longitude_of_ascending_node": 3.846401994436777,
+            "argument_of_perihelion": 3.672561659472237,
+            "mean_anomaly": 3.9517903605411187
+        },
+        {
+            "name": "TNO-906",
+            "mass": 0,
+            "semi_major_axis": 459.66796875,
+            "eccentricity": 0.08847656249999998,
+            "inclination": 0.38605183161788637,
+            "longitude_of_ascending_node": 3.0899696892088877,
+            "argument_of_perihelion": 2.6927597146543945,
+            "mean_anomaly": 2.4276357951459704
+        },
+        {
+            "name": "TNO-907",
+            "mass": 0,
+            "semi_major_axis": 460.009765625,
+            "eccentricity": 0.08857421874999998,
+            "inclination": 0.386477937392299,
+            "longitude_of_ascending_node": 2.659297776463919,
+            "argument_of_perihelion": 0.7561250764406616,
+            "mean_anomaly": 4.838790421620791
+        },
+        {
+            "name": "TNO-908",
+            "mass": 0,
+            "semi_major_axis": 460.3515625,
+            "eccentricity": 0.08867187499999998,
+            "inclination": 0.38690404316671173,
+            "longitude_of_ascending_node": 4.048300259722195,
+            "argument_of_perihelion": 1.5553818889345008,
+            "mean_anomaly": 1.4545129828545713
+        },
+        {
+            "name": "TNO-909",
+            "mass": 0,
+            "semi_major_axis": 460.693359375,
+            "eccentricity": 0.08876953124999998,
+            "inclination": 0.3873301489411244,
+            "longitude_of_ascending_node": 2.390129910776145,
+            "argument_of_perihelion": 1.7506167328592614,
+            "mean_anomaly": 3.821385611953127
+        },
+        {
+            "name": "TNO-910",
+            "mass": 0,
+            "semi_major_axis": 461.03515625,
+            "eccentricity": 0.08886718749999999,
+            "inclination": 0.3877562547155371,
+            "longitude_of_ascending_node": 0.22124053856248194,
+            "argument_of_perihelion": 5.854736164850748,
+            "mean_anomaly": 2.868470787941114
+        },
+        {
+            "name": "TNO-911",
+            "mass": 0,
+            "semi_major_axis": 461.376953125,
+            "eccentricity": 0.08896484374999998,
+            "inclination": 0.38818236048994975,
+            "longitude_of_ascending_node": 2.913098474909457,
+            "argument_of_perihelion": 2.737110449182687,
+            "mean_anomaly": 5.493228938791964
+        },
+        {
+            "name": "TNO-912",
+            "mass": 0,
+            "semi_major_axis": 461.71875,
+            "eccentricity": 0.08906249999999998,
+            "inclination": 0.38860846626436246,
+            "longitude_of_ascending_node": 3.1442996841634963,
+            "argument_of_perihelion": 2.7175983485951476,
+            "mean_anomaly": 2.2746249762161788
+        },
+        {
+            "name": "TNO-913",
+            "mass": 0,
+            "semi_major_axis": 462.060546875,
+            "eccentricity": 0.08916015624999998,
+            "inclination": 0.3890345720387751,
+            "longitude_of_ascending_node": 4.539791398432575,
+            "argument_of_perihelion": 1.0663352563558557,
+            "mean_anomaly": 4.176293027253564
+        },
+        {
+            "name": "TNO-914",
+            "mass": 0,
+            "semi_major_axis": 462.40234375,
+            "eccentricity": 0.08925781249999998,
+            "inclination": 0.38946067781318777,
+            "longitude_of_ascending_node": 3.4050850738960405,
+            "argument_of_perihelion": 2.33222429011113,
+            "mean_anomaly": 2.56682531684639
+        },
+        {
+            "name": "TNO-915",
+            "mass": 0,
+            "semi_major_axis": 462.744140625,
+            "eccentricity": 0.08935546874999999,
+            "inclination": 0.3898867835876005,
+            "longitude_of_ascending_node": 3.464277650522328,
+            "argument_of_perihelion": 0.7321858543634744,
+            "mean_anomaly": 1.0575102655993296
+        },
+        {
+            "name": "TNO-916",
+            "mass": 0,
+            "semi_major_axis": 463.0859375,
+            "eccentricity": 0.08945312499999998,
+            "inclination": 0.39031288936201314,
+            "longitude_of_ascending_node": 0.5278257575416153,
+            "argument_of_perihelion": 1.4069569689935197,
+            "mean_anomaly": 4.146333135073037
+        },
+        {
+            "name": "TNO-917",
+            "mass": 0,
+            "semi_major_axis": 463.427734375,
+            "eccentricity": 0.08955078124999998,
+            "inclination": 0.39073899513642585,
+            "longitude_of_ascending_node": 1.5469957734283448,
+            "argument_of_perihelion": 4.787846082822546,
+            "mean_anomaly": 3.0915005349213347
+        },
+        {
+            "name": "TNO-918",
+            "mass": 0,
+            "semi_major_axis": 463.76953125,
+            "eccentricity": 0.08964843749999998,
+            "inclination": 0.3911651009108385,
+            "longitude_of_ascending_node": 3.262694228829433,
+            "argument_of_perihelion": 3.6702344676820267,
+            "mean_anomaly": 0.7326923781828949
+        },
+        {
+            "name": "TNO-919",
+            "mass": 0,
+            "semi_major_axis": 464.111328125,
+            "eccentricity": 0.08974609374999998,
+            "inclination": 0.39159120668525116,
+            "longitude_of_ascending_node": 1.7744355904261926,
+            "argument_of_perihelion": 2.5128365438463134,
+            "mean_anomaly": 2.153242678001394
+        },
+        {
+            "name": "TNO-920",
+            "mass": 0,
+            "semi_major_axis": 464.453125,
+            "eccentricity": 0.08984374999999999,
+            "inclination": 0.39201731245966387,
+            "longitude_of_ascending_node": 3.9951048171585306,
+            "argument_of_perihelion": 0.13633623197003072,
+            "mean_anomaly": 0.22459176876676548
+        },
+        {
+            "name": "TNO-921",
+            "mass": 0,
+            "semi_major_axis": 464.794921875,
+            "eccentricity": 0.08994140624999998,
+            "inclination": 0.3924434182340765,
+            "longitude_of_ascending_node": 1.931222528034081,
+            "argument_of_perihelion": 0.03405101622297926,
+            "mean_anomaly": 3.4836935720750852
+        },
+        {
+            "name": "TNO-922",
+            "mass": 0,
+            "semi_major_axis": 465.13671875,
+            "eccentricity": 0.09003906249999998,
+            "inclination": 0.39286952400848923,
+            "longitude_of_ascending_node": 0.8585547752265578,
+            "argument_of_perihelion": 1.05540159005389,
+            "mean_anomaly": 1.6940820050229128
+        },
+        {
+            "name": "TNO-923",
+            "mass": 0,
+            "semi_major_axis": 465.478515625,
+            "eccentricity": 0.09013671874999998,
+            "inclination": 0.3932956297829019,
+            "longitude_of_ascending_node": 5.308827369571432,
+            "argument_of_perihelion": 3.1686281359292017,
+            "mean_anomaly": 3.9195168611810036
+        },
+        {
+            "name": "TNO-924",
+            "mass": 0,
+            "semi_major_axis": 465.8203125,
+            "eccentricity": 0.09023437499999998,
+            "inclination": 0.39372173555731454,
+            "longitude_of_ascending_node": 1.745792979330916,
+            "argument_of_perihelion": 4.015146378300271,
+            "mean_anomaly": 3.4820446135412197
+        },
+        {
+            "name": "TNO-925",
+            "mass": 0,
+            "semi_major_axis": 466.162109375,
+            "eccentricity": 0.09033203124999999,
+            "inclination": 0.39414784133172726,
+            "longitude_of_ascending_node": 4.511280422217056,
+            "argument_of_perihelion": 5.625542915215007,
+            "mean_anomaly": 2.9386179875160767
+        },
+        {
+            "name": "TNO-926",
+            "mass": 0,
+            "semi_major_axis": 466.50390625,
+            "eccentricity": 0.09042968749999998,
+            "inclination": 0.3945739471061399,
+            "longitude_of_ascending_node": 3.379702049929052,
+            "argument_of_perihelion": 2.7306949386235724,
+            "mean_anomaly": 4.129992744332514
+        },
+        {
+            "name": "TNO-927",
+            "mass": 0,
+            "semi_major_axis": 466.845703125,
+            "eccentricity": 0.09052734374999998,
+            "inclination": 0.3950000528805526,
+            "longitude_of_ascending_node": 4.133695501509562,
+            "argument_of_perihelion": 1.7407612638263035,
+            "mean_anomaly": 2.171522225578887
+        },
+
+        {
+            "name": "TNO-928",
+            "mass": 0,
+            "semi_major_axis": 510.845703125,
+            "eccentricity": 0.09052734374999998,
+            "inclination": 0.03950000528805526,
+            "longitude_of_ascending_node": 5.133695501509562,
+            "argument_of_perihelion": 0.7407612638263035,
+            "mean_anomaly": 5.171522225578887
+        }
     ]
 }
