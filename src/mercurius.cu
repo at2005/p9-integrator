@@ -91,10 +91,15 @@ __host__ int main(int argc, char **argv)
   size_t sram_size = sim.num_bodies * sizeof(double3) * 2 +
                      sim.num_bodies * sizeof(double) * 7 + sizeof(double);
 
+  if (print_sim_info) std::cout << "Allocating " << sram_size << " bytes of SRAM" << std::endl;
+
   // ie after BATCH_SIZE timesteps, we want to print the output
   // and run kernel with updated orbital elements this is to save memory
-  int NUM_ITERS = NUM_TIMESTEPS / BATCH_SIZE;
-  assert(NUM_TIMESTEPS % BATCH_SIZE == 0);
+  int NUM_ITERS = NUM_TIMESTEPS > BATCH_SIZE ? NUM_TIMESTEPS / BATCH_SIZE : NUM_TIMESTEPS;
+  if (NUM_TIMESTEPS > BATCH_SIZE) assert(NUM_TIMESTEPS % BATCH_SIZE == 0);
+
+  size_t max_sram = 227 * 1024;
+  cudaFuncSetAttribute(mercurius_solver, cudaFuncAttributeMaxDynamicSharedMemorySize, max_sram);
 
   for (int batch = 0; batch < NUM_ITERS; batch++)
   {

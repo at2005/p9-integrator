@@ -112,11 +112,10 @@ __host__ void args_parse(int argc,
                          int *num_timesteps,
                          std::string *config_file,
                          std::string *output_file)
-                         
+
 {
   for (int i = 0; i < argc; i++)
   {
-
     *print_sim_info = *print_sim_info || !strcmp(argv[i], "-i");
     *print_positions = *print_positions || !strcmp(argv[i], "-p");
 
@@ -132,11 +131,10 @@ __host__ void args_parse(int argc,
       continue;
     }
 
-    if(!strcmp(argv[i], "-o"))
+    if (!strcmp(argv[i], "-o"))
     {
       *output_file = std::string(argv[i + 1]);
     }
-
   }
 }
 

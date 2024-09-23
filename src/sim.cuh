@@ -581,7 +581,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double *vec_masses_hbm,
                                  double3 *output_positions,
                                  double dt)
-                                 
+
 {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   // declare SRAM buffer

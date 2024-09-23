@@ -120,7 +120,7 @@ def p9_setup_config():
         "name": f"TNO-{i}",
         "mass": 0,
         "semi_major_axis": 150 + a_spacing * i,
-        "eccentricity": i*e_spacing,
+        "eccentricity": e_lower + i*e_spacing,
         "inclination": i_spacing * i,
         "longitude_of_ascending_node": np.random.uniform(0, 2*np.pi),
         "argument_of_perihelion": np.random.uniform(0, 2*np.pi),
