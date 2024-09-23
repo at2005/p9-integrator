@@ -110,11 +110,12 @@ __host__ void args_parse(int argc,
                          bool *print_sim_info,
                          bool *print_positions,
                          int *num_timesteps,
-                         std::string *config_file)
+                         std::string *config_file,
+                         std::string *output_file)
+                         
 {
   for (int i = 0; i < argc; i++)
   {
-    // print sim info
 
     *print_sim_info = *print_sim_info || !strcmp(argv[i], "-i");
     *print_positions = *print_positions || !strcmp(argv[i], "-p");
@@ -128,14 +129,21 @@ __host__ void args_parse(int argc,
     if (!strcmp(argv[i], "-c"))
     {
       *config_file = std::string(argv[i + 1]);
+      continue;
     }
+
+    if(!strcmp(argv[i], "-o"))
+    {
+      *output_file = std::string(argv[i + 1]);
+    }
+
   }
 }
 
-__host__ void pretty_print_positions(Sim *sim, double3 *output_positions, int batch_size, int batch_index)
+__host__ void pretty_print_positions(Sim *sim, double3 *output_positions, int batch_index)
 {
-  int offset = batch_size * batch_index;
-  for (int i = 0; i < batch_size; i++)
+  int offset = BATCH_SIZE * batch_index;
+  for (int i = 0; i < BATCH_SIZE; i++)
   {
     std::cout << "# Timestep " << offset + (i + 1) << std::endl;
     for (int j = 0; j < sim->num_bodies; j++)

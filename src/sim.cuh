@@ -580,8 +580,8 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double *vec_longitude_of_ascending_node_hbm,
                                  double *vec_masses_hbm,
                                  double3 *output_positions,
-                                 double dt,
-                                 int STEPS_BATCH_SIZE)
+                                 double dt)
+                                 
 {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   // declare SRAM buffer
@@ -624,7 +624,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   // convert to democratic heliocentric coordinates
   democratic_heliocentric_conversion(positions, velocities, masses);
 
-  for (int i = 0; i < STEPS_BATCH_SIZE; i++)
+  for (int i = 0; i < BATCH_SIZE; i++)
   {
     // first "kicks"
     __syncthreads();

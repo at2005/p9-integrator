@@ -6,6 +6,7 @@ __host__ int main(int argc, char **argv)
   // cli args
   bool print_sim_info = false;
   bool print_positions = false;
+  std::string output_file;
   std::string config_file;
   // default is one orbital period (of Earth)
   int NUM_TIMESTEPS = 1;
@@ -14,7 +15,8 @@ __host__ int main(int argc, char **argv)
              &print_sim_info,
              &print_positions,
              &NUM_TIMESTEPS,
-             &config_file);
+             &config_file,
+             &output_file);
 
   Sim sim;
   sim_from_config_file(&sim, config_file, NUM_TIMESTEPS);
@@ -91,7 +93,6 @@ __host__ int main(int argc, char **argv)
 
   // ie after BATCH_SIZE timesteps, we want to print the output
   // and run kernel with updated orbital elements this is to save memory
-  int BATCH_SIZE = 100;
   int NUM_ITERS = NUM_TIMESTEPS / BATCH_SIZE;
   assert(NUM_TIMESTEPS % BATCH_SIZE == 0);
 
@@ -106,8 +107,7 @@ __host__ int main(int argc, char **argv)
         vec_longitude_of_ascending_node_device,
         masses_device,
         output_positions_device,
-        dt,
-        BATCH_SIZE);
+        dt);
 
     if (print_sim_info) std::cout << "Batch " << (batch + 1) << " Simulation Complete. Synchronizing...\n";
     cudaDeviceSynchronize();
@@ -117,6 +117,7 @@ __host__ int main(int argc, char **argv)
                cudaMemcpyDeviceToHost);
 
     if (print_positions) pretty_print_positions(&sim, output_positions, batch);
+    // if(output_file != "") write_output(output_positions, batch, output_file);
   }
 
   cudaFree(vec_longitude_of_ascending_node_device);
