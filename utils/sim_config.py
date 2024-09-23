@@ -66,7 +66,7 @@ def p9_setup_config():
         "inclination": np.radians(20),
         "longitude_of_ascending_node": np.radians(86),
         "argument_of_perihelion": np.radians(138),
-        "mean_anomaly": np.radians(-176.2)
+        "mean_anomaly": 2*np.pi + np.radians(-176.2)
     })
 
     # adding 4 gas giants
@@ -77,7 +77,7 @@ def p9_setup_config():
         "eccentricity" :0.00858587,
         "inclination" : np.radians(1.76917),
         "longitude_of_ascending_node" : np.radians(131.72169),
-        "argument_of_perihelion" : np.radians(-86.75034),
+        "argument_of_perihelion" : 2*np.pi + np.radians(-86.75034),
         "mean_anomaly" : 0.00
     })
 
@@ -89,7 +89,7 @@ def p9_setup_config():
         "eccentricity" : 0.04716771,
         "inclination" : np.radians(0.76986),
         "longitude_of_ascending_node" : np.radians(74.22988),
-        "argument_of_perihelion" : np.radians(-96.73436),
+        "argument_of_perihelion" : 2* np.pi + np.radians(-96.73436),
         "mean_anomaly" : 0.00
     })
 
@@ -100,7 +100,7 @@ def p9_setup_config():
         "eccentricity": 0.05415060,
         "inclination": np.radians(2.48446),
         "longitude_of_ascending_node": np.radians(113.71504),
-        "argument_of_perihelion": np.radians(-21.2831),
+        "argument_of_perihelion": 2*np.pi + np.radians(-21.2831),
         "mean_anomaly": 0.00
     })
 
@@ -111,7 +111,7 @@ def p9_setup_config():
         "eccentricity": 0.04839266,
         "inclination": np.radians(1.30530),
         "longitude_of_ascending_node": np.radians(100.55615),
-        "argument_of_perihelion": np.radians(-85.8023),
+        "argument_of_perihelion": 2* np.pi + np.radians(-85.8023),
         "mean_anomaly": 0.00
     })
 

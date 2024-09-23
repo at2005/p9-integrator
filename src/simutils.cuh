@@ -115,20 +115,14 @@ __host__ void args_parse(int argc,
   for (int i = 0; i < argc; i++)
   {
     // print sim info
-    if (!strcmp(argv[i], "-i"))
-    {
-      *print_sim_info = true;
-      continue;
-    }
 
-    if (!strcmp(argv[i], "-p"))
-    {
-      *print_positions = true;
-    }
+    *print_sim_info = *print_sim_info || !strcmp(argv[i], "-i");
+    *print_positions = *print_positions || !strcmp(argv[i], "-p");
 
     if (!strcmp(argv[i], "-t"))
     {
       *num_timesteps = atoi(argv[i + 1]);
+      continue;
     }
 
     if (!strcmp(argv[i], "-c"))
@@ -138,11 +132,12 @@ __host__ void args_parse(int argc,
   }
 }
 
-__host__ void pretty_print_positions(Sim *sim, double3 *output_positions)
+__host__ void pretty_print_positions(Sim *sim, double3 *output_positions, int batch_size, int batch_index)
 {
-  for (int i = 0; i < sim->num_timesteps; i++)
+  int offset = batch_size * batch_index;
+  for (int i = 0; i < batch_size; i++)
   {
-    std::cout << "# Timestep " << i << std::endl;
+    std::cout << "# Timestep " << offset + (i + 1) << std::endl;
     for (int j = 0; j < sim->num_bodies; j++)
     {
       std::cout << sim->body_names[j] << ": "

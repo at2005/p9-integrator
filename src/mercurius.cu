@@ -30,7 +30,7 @@ __host__ int main(int argc, char **argv)
       *vec_eccentricity_device, *vec_semi_major_axis_device, *masses_device;
   double3 *output_positions_device;
   double3 *output_positions =
-      (double3 *)malloc(sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS);
+      (double3 *)malloc(sim.num_bodies * sizeof(double3) * BATCH_SIZE);
 
   cudaMalloc((void **)&vec_longitude_of_ascending_node_device,
              sim.num_bodies * sizeof(double));
@@ -45,7 +45,7 @@ __host__ int main(int argc, char **argv)
              sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&masses_device, (sim.num_bodies + 1) * sizeof(double));
   cudaMalloc((void **)&output_positions_device,
-             sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS);
+             sim.num_bodies * sizeof(double3) * BATCH_SIZE);
 
   cudaMemcpy(vec_longitude_of_ascending_node_device,
              sim.vec_longitude_of_ascending_node,
@@ -88,26 +88,36 @@ __host__ int main(int argc, char **argv)
   // for each body (so 7 doubles) + 1 for sun
   size_t sram_size = sim.num_bodies * sizeof(double3) * 2 +
                      sim.num_bodies * sizeof(double) * 7 + sizeof(double);
-  mercurius_solver<<<1, sim.num_bodies, sram_size>>>(
-      vec_argument_of_perihelion_device,
-      vec_mean_anomaly_device,
-      vec_eccentricity_device,
-      vec_semi_major_axis_device,
-      vec_inclination_device,
-      vec_longitude_of_ascending_node_device,
-      masses_device,
-      output_positions_device,
-      dt,
-      NUM_TIMESTEPS);
 
-  if (print_sim_info) std::cout << "Simulation Finished. Synchronizing...\n";
-  cudaDeviceSynchronize();
-  cudaMemcpy(output_positions,
-             output_positions_device,
-             sim.num_bodies * sizeof(double3) * NUM_TIMESTEPS,
-             cudaMemcpyDeviceToHost);
+  // ie after BATCH_SIZE timesteps, we want to print the output
+  // and run kernel with updated orbital elements this is to save memory
+  int BATCH_SIZE = 100;
+  int NUM_ITERS = NUM_TIMESTEPS / BATCH_SIZE;
+  assert(NUM_TIMESTEPS % BATCH_SIZE == 0);
 
-  if (print_positions) pretty_print_positions(&sim, output_positions);
+  for (int batch = 0; batch < NUM_ITERS; batch++)
+  {
+    mercurius_solver<<<1, sim.num_bodies, sram_size>>>(
+        vec_argument_of_perihelion_device,
+        vec_mean_anomaly_device,
+        vec_eccentricity_device,
+        vec_semi_major_axis_device,
+        vec_inclination_device,
+        vec_longitude_of_ascending_node_device,
+        masses_device,
+        output_positions_device,
+        dt,
+        BATCH_SIZE);
+
+    if (print_sim_info) std::cout << "Batch " << (batch + 1) << " Simulation Complete. Synchronizing...\n";
+    cudaDeviceSynchronize();
+    cudaMemcpy(output_positions,
+               output_positions_device,
+               sim.num_bodies * sizeof(double3) * BATCH_SIZE,
+               cudaMemcpyDeviceToHost);
+
+    if (print_positions) pretty_print_positions(&sim, output_positions, batch);
+  }
 
   cudaFree(vec_longitude_of_ascending_node_device);
   cudaFree(vec_inclination_device);

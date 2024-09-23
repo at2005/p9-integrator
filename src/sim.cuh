@@ -511,13 +511,17 @@ __device__ PosVel richardson_extrapolation(
 
 // this ensures that the sun is in a reference frame in which it is stationary
 // and at the origin
-__device__ void convert_to_democratic_heliocentric_coordinates(
+__device__ void democratic_heliocentric_conversion(
     double3 *positions,
     double3 *velocities,
-    double *masses)
+    double *masses,
+    bool reverse = false)
 {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   double total_mass = 0.0;
+  double not_reverse_d = (double)(!reverse);
+  double add_or_sub = pow(-1, not_reverse_d);
+
   double3 mass_weighted_v = make_double3(0.0, 0.0, 0.0);
   for (int i = 0; i < blockDim.x; i++)
   {
@@ -531,14 +535,16 @@ __device__ void convert_to_democratic_heliocentric_coordinates(
   // velocities
   __syncthreads();
 
-  double scaling_factor = 1.00 / (total_mass + masses[0]);
+  // if we are performing the reverse conversion, we just need to divide by the main mass
+  double scaling_factor = 1.00 / ((not_reverse_d * total_mass) + masses[0]);
   mass_weighted_v.x *= scaling_factor;
   mass_weighted_v.y *= scaling_factor;
   mass_weighted_v.z *= scaling_factor;
 
-  velocities[idx].x -= mass_weighted_v.x;
-  velocities[idx].y -= mass_weighted_v.y;
-  velocities[idx].z -= mass_weighted_v.z;
+  // if we are performing the reverse conversion, we need to add not subtract
+  velocities[idx].x += add_or_sub * mass_weighted_v.x;
+  velocities[idx].y += add_or_sub * mass_weighted_v.y;
+  velocities[idx].z += add_or_sub * mass_weighted_v.z;
 }
 
 __device__ bool close_encounter_p(
@@ -575,7 +581,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double *vec_masses_hbm,
                                  double3 *output_positions,
                                  double dt,
-                                 int NUM_TIMESTEPS)
+                                 int STEPS_BATCH_SIZE)
 {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   // declare SRAM buffer
@@ -616,9 +622,9 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                           velocities);
   __syncthreads();
   // convert to democratic heliocentric coordinates
-  convert_to_democratic_heliocentric_coordinates(positions, velocities, masses);
+  democratic_heliocentric_conversion(positions, velocities, masses);
 
-  for (int i = 0; i < NUM_TIMESTEPS; i++)
+  for (int i = 0; i < STEPS_BATCH_SIZE; i++)
   {
     // first "kicks"
     __syncthreads();
@@ -717,6 +723,26 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // particular body
     output_positions[i * blockDim.x + idx] = positions[idx];
   }
+
+  // convert back to heliocentric coordinates
+  democratic_heliocentric_conversion(positions, velocities, masses, true);
+  // convert back to elements
+  elements_from_cartesian(positions,
+                          velocities,
+                          vec_inclination,
+                          vec_longitude_of_ascending_node,
+                          vec_argument_of_perihelion,
+                          vec_mean_anomaly,
+                          vec_eccentricity,
+                          vec_semi_major_axis);
+
+  // copy elements to hbm, this is so that the next batch iteration uses these values to pick up where we left off
+  vec_semi_major_axis_hbm[idx] = vec_semi_major_axis[idx];
+  vec_eccentricity_hbm[idx] = vec_eccentricity[idx];
+  vec_mean_anomaly_hbm[idx] = vec_mean_anomaly[idx];
+  vec_argument_of_perihelion_hbm[idx] = vec_argument_of_perihelion[idx];
+  vec_inclination_hbm[idx] = vec_inclination[idx];
+  vec_longitude_of_ascending_node_hbm[idx] = vec_longitude_of_ascending_node[idx];
 }
 
 #endif
