@@ -9,6 +9,20 @@ This file contains the core numerical integration kernel and associated helper
 functions for my implementation of the Mercury N-body Integrator.
 */
 
+
+// cache powers of two for richardson extrapolation
+__device__ double* get_pow_two_table() {
+  static double pow_two_table[MAX_ROWS_RICHARDSON];
+  static bool initialized = false;
+  if (!initialized) {
+    for (int i = 1; i < MAX_ROWS_RICHARDSON; i++) {
+      pow_two_table[i] = pow(2, i);
+    }
+    initialized = true;
+  }
+  return pow_two_table;
+}
+
 __device__ double3 cross(const double3 &a, const double3 &b)
 {
   return make_double3(a.y * b.z - a.z * b.y,
@@ -23,15 +37,21 @@ __device__ double stable_sqrt(double x)
   return sqrt(x * gtz);
 }
 
+
+__device__ void efficient_magnitude(double *mag, double *mag_sq, const double3 &a)
+{
+  *mag_sq = a.x * a.x + a.y * a.y + a.z * a.z;
+  *mag = stable_sqrt(*mag_sq);
+}
+
+
 __device__ double magnitude(const double3 &a)
 {
   return stable_sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
 }
 
-__device__ double magnitude_squared(const double3 &a)
-{
-  return a.x * a.x + a.y * a.y + a.z * a.z;
-}
+__device__ double magnitude_squared(const double3 &a) { return a.x * a.x + a.y * a.y + a.z * a.z; }
+
 
 __device__ double stable_acos(double x)
 {
@@ -278,7 +298,10 @@ __device__ double3 body_interaction_kick(
     dist.x = positions[i].x - my_position.x;
     dist.y = positions[i].y - my_position.y;
     dist.z = positions[i].z - my_position.z;
-    double r = magnitude(dist);
+    
+    double r_sq; 
+    double r;
+    efficient_magnitude(&r, &r_sq, dist);
 
     // compute both K and r_crit
     KR_Crit changeover_vals = changeover(current_coords, positions, velocities, masses, i, dt);
@@ -295,8 +318,8 @@ __device__ double3 body_interaction_kick(
     }
 
     // add smoothing constant
-    double r_sq = r * r;
-    r_sq += SMOOTHING_CONSTANT * SMOOTHING_CONSTANT;
+    
+    r_sq += SMOOTHING_CONSTANT_SQUARED;
     // the (r^2 + s^2) comes from inv sq law w/ smoothing, and the other r bc
     // direction is normalized
     double force_denom = r_sq * r;
@@ -361,10 +384,11 @@ __device__ double3 update_my_velocity_total(
   // now for the main body:
   // update acceleration due to main body
   // a = - G * M / r^3 * r, which in this case simplifies to 1/(r^3) * r_vec
-  double r_sq = magnitude_squared(my_position);
-  double r = stable_sqrt(r_sq);
+  double r;
+  double r_sq;
+  efficient_magnitude(&r, &r_sq, my_position);
   // add smoothing constant
-  r_sq += SMOOTHING_CONSTANT * SMOOTHING_CONSTANT;
+  r_sq += SMOOTHING_CONSTANT_SQUARED;
   double force_denom = r_sq * r;
   double3 r_vec = make_double3(my_position.x / force_denom,
                                my_position.y / force_denom,
@@ -431,7 +455,6 @@ __device__ PosVel modified_midpoint(
   // store final positions and velocities
   res.pos = out;
   res.vel = current_coords.vel;
-  // restore velocities and positions
   return res;
 }
 
@@ -456,6 +479,8 @@ __device__ PosVel richardson_extrapolation(
     const double *masses,
     double dt)
 {
+
+  double* pow_two_table = get_pow_two_table();
   int N = 1;
   PosVel out;
   PosVel buffer[MAX_ROWS_RICHARDSON][MAX_ROWS_RICHARDSON];
@@ -463,11 +488,11 @@ __device__ PosVel richardson_extrapolation(
   buffer[0][0] = modified_midpoint(current_coords, positions, velocities, masses, dt, N);
   for (int i = 1; i < MAX_ROWS_RICHARDSON; i++)
   {
-    N = pow(2, i);
+    N = pow_two_table[i];
     buffer[i][0] = modified_midpoint(current_coords, positions, velocities, masses, dt, N);
     for (int j = 1; j <= i; j++)
     {
-      double pow2 = pow(2, j);
+      double pow2 = pow_two_table[j];
 
       // for positions
       buffer[i][j].pos.x =
@@ -721,6 +746,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     output_positions[i * blockDim.x + idx] = positions[idx];
   }
 
+  __syncthreads();
   // convert back to heliocentric coordinates
   democratic_heliocentric_conversion(positions, velocities, masses, true);
   // convert back to elements
