@@ -333,7 +333,7 @@ __device__ double3 main_body_kinetic(const double3 *positions,
   double3 my_position = positions[idx];
   double3 p = make_double3(0.0, 0.0, 0.0);
   // calculate total momentum of all bodies
-  for (int i = 0; i < blockDim.x + 1; i++)
+  for (int i = 0; i < blockDim.x; i++)
   {
     p.x = fma(masses[i], velocities[i].x, p.x);
     p.y = fma(masses[i], velocities[i].y, p.y);
@@ -391,7 +391,7 @@ __device__ PosVel modified_midpoint(
     const double3 *velocities,
     const double *masses,
     double dt,
-    uint8_t N)
+    uint32_t N)
 {
   /*
   returns an updated position based on the modified midpoint method.
@@ -462,47 +462,45 @@ __device__ PosVel richardson_extrapolation(
     const double3 *positions,
     const double3 *velocities,
     const double *masses,
-    uint8_t *pow_two_table,
     double dt)
 {
-  uint8_t N = 1;
+  uint32_t N = 1;
   PosVel out;
   PosVel buffer[MAX_ROWS_RICHARDSON][MAX_ROWS_RICHARDSON];
   // for our first approx, we use the OG dt
   buffer[0][0] = modified_midpoint(current_coords, positions, velocities, masses, dt, N);
   for (int i = 1; i < MAX_ROWS_RICHARDSON; i++)
   {
-    N = pow_two_table[i];
+    N <<= 1;
+    // N = pow(2, i);
     buffer[i][0] = modified_midpoint(current_coords, positions, velocities, masses, dt, N);
+
     for (int j = 1; j <= i; j++)
     {
-      double pow2 = pow_two_table[j];
+      // NOTE: do not use implement this with uint32_t bitshifts bc it does not work for some really strange reason
+      double dpow2 = pow(4.00, j);
+      double denom = dpow2 - 1.00;
 
       // for positions
       buffer[i][j].pos.x =
-          fma(pow2, buffer[i][j - 1].pos.x, -buffer[i - 1][j - 1].pos.x);
+          fma(dpow2, buffer[i][j - 1].pos.x, -buffer[i - 1][j - 1].pos.x);
       buffer[i][j].pos.y =
-          fma(pow2, buffer[i][j - 1].pos.y, -buffer[i - 1][j - 1].pos.y);
+          fma(dpow2, buffer[i][j - 1].pos.y, -buffer[i - 1][j - 1].pos.y);
       buffer[i][j].pos.z =
-          fma(pow2, buffer[i][j - 1].pos.z, -buffer[i - 1][j - 1].pos.z);
+          fma(dpow2, buffer[i][j - 1].pos.z, -buffer[i - 1][j - 1].pos.z);
 
       // for velocities
-      buffer[i][j].vel.x =
-          fma(pow2, buffer[i][j - 1].vel.x, -buffer[i - 1][j - 1].vel.x);
-      buffer[i][j].vel.y =
-          fma(pow2, buffer[i][j - 1].vel.y, -buffer[i - 1][j - 1].vel.y);
-      buffer[i][j].vel.z =
-          fma(pow2, buffer[i][j - 1].vel.z, -buffer[i - 1][j - 1].vel.z);
+      buffer[i][j].vel.x = fma(dpow2, buffer[i][j - 1].vel.x, -buffer[i - 1][j - 1].vel.x);
+      buffer[i][j].vel.y = fma(dpow2, buffer[i][j - 1].vel.y, -buffer[i - 1][j - 1].vel.y);
+      buffer[i][j].vel.z = fma(dpow2, buffer[i][j - 1].vel.z, -buffer[i - 1][j - 1].vel.z);
 
-      pow2 -= 1;
+      buffer[i][j].pos.x /= denom;
+      buffer[i][j].pos.y /= denom;
+      buffer[i][j].pos.z /= denom;
 
-      buffer[i][j].pos.x /= pow2;
-      buffer[i][j].pos.y /= pow2;
-      buffer[i][j].pos.z /= pow2;
-
-      buffer[i][j].vel.x /= pow2;
-      buffer[i][j].vel.y /= pow2;
-      buffer[i][j].vel.z /= pow2;
+      buffer[i][j].vel.x /= denom;
+      buffer[i][j].vel.y /= denom;
+      buffer[i][j].vel.z /= denom;
     }
 
     if (is_converged(buffer[i][i], buffer[i - 1][i - 1]))
@@ -590,7 +588,6 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double *vec_longitude_of_ascending_node_hbm,
                                  double *vec_masses_hbm,
                                  double3 *output_positions,
-                                 uint8_t *pow_two_table,
                                  double dt)
 
 {
@@ -663,7 +660,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
       // directly updates positions and velocities by dt
       numerical_soln_to_close_encounter =
           // modified_midpoint((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt, 1);
-          richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, pow_two_table, dt);
+          richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt);
     }
     else
     {

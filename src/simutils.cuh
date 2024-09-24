@@ -198,23 +198,4 @@ __host__ void sim_from_config_file(Sim *sim,
   }
 }
 
-// cache powers of two for richardson extrapolation
-__host__ uint8_t *get_pow_two_table()
-{
-  uint8_t *pow_two_table_hbm;
-  cudaMalloc((void **)&pow_two_table_hbm, (MAX_ROWS_RICHARDSON + 1) * sizeof(uint8_t));
-
-  uint8_t *pow_two_table = (uint8_t *)malloc((MAX_ROWS_RICHARDSON + 1) * sizeof(uint8_t));
-  uint8_t n = 2;
-  // so for now this is less than 8 bits
-  for (int i = 1; i < MAX_ROWS_RICHARDSON + 1; i++)
-  {
-    pow_two_table[i] = n;
-    n <<= 1;
-  }
-
-  cudaMemcpy(pow_two_table_hbm, pow_two_table, (MAX_ROWS_RICHARDSON + 1) * sizeof(uint8_t), cudaMemcpyHostToDevice);
-  return pow_two_table_hbm;
-}
-
 #endif
