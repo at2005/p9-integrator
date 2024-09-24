@@ -41,11 +41,12 @@ __device__ double stable_sqrt(double x)
   return sqrt(x * gtz);
 }
 
-__device__ double magnitude_squared(const double3 &a) { 
-  double temp = a.z * a.z; 
+__device__ double magnitude_squared(const double3 &a)
+{
+  double temp = a.z * a.z;
   double temp2 = fma(a.y, a.y, temp);
   double temp3 = fma(a.x, a.x, temp2);
-  return fma(a.y, temp3, temp);
+  return temp3;
 }
 
 // compute mag_sq + norm in one
