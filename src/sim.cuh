@@ -102,7 +102,7 @@ __device__ double fetch_r_crit(
   // double v1 = magnitude(current_coords.vel);
   // double v2 = magnitude(velocities[idx_other]);
   // double mutual_hill_radius =
-  //     cbrt(masses[threadIdx.x + blockIdx.x * blockDim.x + 1] + masses[idx_other + 1] / 3.00) * (r1 + r2) / 2.00;
+  //     cbrt(masses[threadIdx.x + blockIdx.x * blockDim.x] + masses[idx_other] / 3.00) * (r1 + r2) / 2.00;
   // double vmax = max(v1, v2);
   // return max(n1 * mutual_hill_radius, n2 * vmax * dt);
   return 0.06;
@@ -302,7 +302,7 @@ __device__ double3 body_interaction_kick(
     double force_denom = r_sq * r;
 
     double weighted_acceleration =
-        changeover_weight * masses[i + 1] / force_denom;
+        changeover_weight * masses[i] / force_denom;
     // // accumulate total acceleration due to all bodies, except self
     acc.x += weighted_acceleration * dist.x;
     acc.y += weighted_acceleration * dist.y;
@@ -325,17 +325,17 @@ __device__ double3 main_body_kinetic(const double3 *positions,
   double3 my_position = positions[idx];
   double3 p = make_double3(0.0, 0.0, 0.0);
   // calculate total momentum of all bodies
-  for (int i = 1; i < blockDim.x + 1; i++)
+  for (int i = 0; i < blockDim.x + 1; i++)
   {
-    p.x += velocities[i - 1].x * masses[i];
-    p.y += velocities[i - 1].y * masses[i];
-    p.z += velocities[i - 1].z * masses[i];
+    p.x += velocities[i].x * masses[i];
+    p.y += velocities[i].y * masses[i];
+    p.z += velocities[i].z * masses[i];
   }
 
-  double scaling_factor = dt / (masses[0]);
-  my_position.x += p.x * scaling_factor;
-  my_position.y += p.y * scaling_factor;
-  my_position.z += p.z * scaling_factor;
+  // assume central mass is 1
+  my_position.x += p.x * dt;
+  my_position.y += p.y * dt;
+  my_position.z += p.z * dt;
   return my_position;
 }
 
@@ -525,18 +525,19 @@ __device__ void democratic_heliocentric_conversion(
   double3 mass_weighted_v = make_double3(0.0, 0.0, 0.0);
   for (int i = 0; i < blockDim.x; i++)
   {
-    total_mass += masses[i + 1];
-    mass_weighted_v.x += masses[i + 1] * velocities[i].x;
-    mass_weighted_v.y += masses[i + 1] * velocities[i].y;
-    mass_weighted_v.z += masses[i + 1] * velocities[i].z;
+    total_mass += masses[i];
+    mass_weighted_v.x += masses[i] * velocities[i].x;
+    mass_weighted_v.y += masses[i] * velocities[i].y;
+    mass_weighted_v.z += masses[i] * velocities[i].z;
   }
 
   // prevent race condition, ensure all threads have finished reading old
   // velocities
   __syncthreads();
 
-  // if we are performing the reverse conversion, we just need to divide by the main mass
-  double scaling_factor = 1.00 / ((not_reverse_d * total_mass) + masses[0]);
+  // if we are performing the reverse conversion, we just need to divide by the main mass = 1
+  double scaling_factor = 1.00 / ((not_reverse_d * total_mass) + 1.00);
+
   mass_weighted_v.x *= scaling_factor;
   mass_weighted_v.y *= scaling_factor;
   mass_weighted_v.z *= scaling_factor;
@@ -589,7 +590,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   double3 *positions = (double3 *)total_memory;
   double3 *velocities = (double3 *)(positions + blockDim.x);
   double *masses = (double *)(velocities + blockDim.x);
-  double *vec_inclination = (double *)(masses + (blockDim.x + 1));
+  double *vec_inclination = (double *)(masses + blockDim.x);
   double *vec_longitude_of_ascending_node =
       (double *)(vec_inclination + blockDim.x);
   double *vec_argument_of_perihelion =
@@ -599,11 +600,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   double *vec_eccentricity = (double *)(vec_mean_anomaly + blockDim.x);
   double *vec_semi_major_axis = (double *)(vec_eccentricity + blockDim.x);
 
-  // copy data to shared memory
-  // special case to avoid race condition
-  if (idx == 0) masses[0] = vec_masses_hbm[0];
-
-  masses[idx + 1] = vec_masses_hbm[idx + 1];
+  masses[idx] = vec_masses_hbm[idx];
   vec_argument_of_perihelion[idx] = vec_argument_of_perihelion_hbm[idx];
   vec_mean_anomaly[idx] = vec_mean_anomaly_hbm[idx];
   vec_eccentricity[idx] = vec_eccentricity_hbm[idx];

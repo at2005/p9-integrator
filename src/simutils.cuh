@@ -63,11 +63,9 @@ __host__ void initialize_std_sim(Sim *sim, int num_bodies, int num_timesteps)
   sim->vec_mean_anomaly = (double *)malloc(num_bodies * sizeof(double));
   sim->vec_eccentricity = (double *)malloc(num_bodies * sizeof(double));
   sim->vec_semi_major_axis = (double *)malloc(num_bodies * sizeof(double));
-  sim->masses = (double *)malloc((num_bodies + 1) * sizeof(double));
+  sim->masses = (double *)malloc(num_bodies * sizeof(double));
   sim->body_names = new std::string[num_bodies];
 
-  // assume convention that main body mass is 1
-  sim->masses[0] = 1.0;
   sim->num_bodies = num_bodies;
   sim->num_timesteps = num_timesteps;
 }
@@ -80,14 +78,13 @@ __host__ void add_body_to_sim(Sim *sim, Body body, int idx)
   sim->vec_mean_anomaly[idx] = body.mean_anomaly;
   sim->vec_eccentricity[idx] = body.eccentricity;
   sim->vec_semi_major_axis[idx] = body.semi_major_axis;
-  sim->masses[idx + 1] = body.mass;
+  sim->masses[idx] = body.mass;
   sim->body_names[idx] = body.name;
 }
 
 __host__ void dump_sim(Sim *sim)
 {
   std::cout << "Simulation with " << sim->num_bodies << " bodies" << std::endl;
-  std::cout << "Main body mass: " << sim->masses[0] << std::endl;
   for (int i = 0; i < sim->num_bodies; i++)
   {
     std::cout << "Body: " << i << std::endl;
@@ -100,7 +97,7 @@ __host__ void dump_sim(Sim *sim)
     std::cout << "eccentricity: " << sim->vec_eccentricity[i] << std::endl;
     std::cout << "semi major axis: " << sim->vec_semi_major_axis[i]
               << std::endl;
-    std::cout << "mass: " << sim->masses[i + 1] << std::endl
+    std::cout << "mass: " << sim->masses[i] << std::endl
               << std::endl;
   }
 }

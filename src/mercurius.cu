@@ -45,7 +45,7 @@ __host__ int main(int argc, char **argv)
              sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&vec_semi_major_axis_device,
              sim.num_bodies * sizeof(double));
-  cudaMalloc((void **)&masses_device, (sim.num_bodies + 1) * sizeof(double));
+  cudaMalloc((void **)&masses_device, sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&output_positions_device,
              sim.num_bodies * sizeof(double3) * BATCH_SIZE);
 
@@ -75,7 +75,7 @@ __host__ int main(int argc, char **argv)
              cudaMemcpyHostToDevice);
   cudaMemcpy(masses_device,
              sim.masses,
-             (sim.num_bodies + 1) * sizeof(double),
+             sim.num_bodies * sizeof(double),
              cudaMemcpyHostToDevice);
 
   // print sim information
@@ -87,9 +87,9 @@ __host__ int main(int argc, char **argv)
   }
 
   // positions and velocity 3-vectors, 6 orbital elements for each body, mass
-  // for each body (so 7 doubles) + 1 for sun
+  // for each body (so 7 doubles)
   size_t sram_size = sim.num_bodies * sizeof(double3) * 2 +
-                     sim.num_bodies * sizeof(double) * 7 + sizeof(double);
+                     sim.num_bodies * sizeof(double) * 7; 
 
   if (print_sim_info) std::cout << "Allocating " << sram_size << " bytes of SRAM" << std::endl;
 
