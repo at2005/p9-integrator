@@ -12,13 +12,13 @@ functions for my implementation of the Mercury N-body Integrator.
 // cache powers of two for richardson extrapolation
 __device__ double *get_pow_two_table()
 {
-  static double pow_two_table[MAX_ROWS_RICHARDSON];
+  static double pow_two_table[MAX_ROWS_RICHARDSON + 1];
   static bool initialized = false;
   if (!initialized)
   {
-    for (int i = 0; i < MAX_ROWS_RICHARDSON; i++)
+    for (int i = 1; i < MAX_ROWS_RICHARDSON; i++)
     {
-      pow_two_table[i] = pow(2, i + 1);
+      pow_two_table[i] = pow(2, i);
     }
     initialized = true;
   }
@@ -631,6 +631,8 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   vec_inclination[idx] = vec_inclination_hbm[idx];
   vec_longitude_of_ascending_node[idx] =
       vec_longitude_of_ascending_node_hbm[idx];
+
+  double half_dt = 0.5 * dt;
   // initially populate positions and velocities
   cartesian_from_elements(vec_inclination,
                           vec_longitude_of_ascending_node,
@@ -649,12 +651,12 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // first "kicks"
     __syncthreads();
     double3 velocity_after_body_interaction =
-        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt / 2.00);
+        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, half_dt);
     __syncthreads();
     velocities[idx] = velocity_after_body_interaction;
     __syncthreads();
     double3 position_after_main_body_kick =
-        main_body_kinetic(positions, velocities, masses, dt / 2.00);
+        main_body_kinetic(positions, velocities, masses, half_dt);
     __syncthreads();
     positions[idx] = position_after_main_body_kick;
     __syncthreads();
@@ -727,12 +729,12 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // final "kicks"
     __syncthreads();
     position_after_main_body_kick =
-        main_body_kinetic(positions, velocities, masses, dt / 2.00);
+        main_body_kinetic(positions, velocities, masses, half_dt);
     __syncthreads();
     positions[idx] = position_after_main_body_kick;
     __syncthreads();
     velocity_after_body_interaction =
-        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt / 2.00);
+        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, half_dt);
     __syncthreads();
     velocities[idx] = velocity_after_body_interaction;
 
