@@ -9,14 +9,16 @@ This file contains the core numerical integration kernel and associated helper
 functions for my implementation of the Mercury N-body Integrator.
 */
 
-
 // cache powers of two for richardson extrapolation
-__device__ double* get_pow_two_table() {
+__device__ double *get_pow_two_table()
+{
   static double pow_two_table[MAX_ROWS_RICHARDSON];
   static bool initialized = false;
-  if (!initialized) {
-    for (int i = 0; i < MAX_ROWS_RICHARDSON; i++) {
-      pow_two_table[i] = pow(2, i+1);
+  if (!initialized)
+  {
+    for (int i = 0; i < MAX_ROWS_RICHARDSON; i++)
+    {
+      pow_two_table[i] = pow(2, i + 1);
     }
     initialized = true;
   }
@@ -37,13 +39,11 @@ __device__ double stable_sqrt(double x)
   return sqrt(x * gtz);
 }
 
-
 __device__ void efficient_magnitude(double *mag, double *mag_sq, const double3 &a)
 {
   *mag_sq = a.x * a.x + a.y * a.y + a.z * a.z;
   *mag = stable_sqrt(*mag_sq);
 }
-
 
 __device__ double magnitude(const double3 &a)
 {
@@ -51,7 +51,6 @@ __device__ double magnitude(const double3 &a)
 }
 
 __device__ double magnitude_squared(const double3 &a) { return a.x * a.x + a.y * a.y + a.z * a.z; }
-
 
 __device__ double stable_acos(double x)
 {
@@ -298,8 +297,8 @@ __device__ double3 body_interaction_kick(
     dist.x = positions[i].x - my_position.x;
     dist.y = positions[i].y - my_position.y;
     dist.z = positions[i].z - my_position.z;
-    
-    double r_sq; 
+
+    double r_sq;
     double r;
     efficient_magnitude(&r, &r_sq, dist);
 
@@ -318,7 +317,7 @@ __device__ double3 body_interaction_kick(
     }
 
     // add smoothing constant
-    
+
     r_sq += SMOOTHING_CONSTANT_SQUARED;
     // the (r^2 + s^2) comes from inv sq law w/ smoothing, and the other r bc
     // direction is normalized
@@ -479,8 +478,7 @@ __device__ PosVel richardson_extrapolation(
     const double *masses,
     double dt)
 {
-
-  double* pow_two_table = get_pow_two_table();
+  double *pow_two_table = get_pow_two_table();
   int N = 1;
   PosVel out;
   PosVel buffer[MAX_ROWS_RICHARDSON][MAX_ROWS_RICHARDSON];

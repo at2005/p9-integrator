@@ -89,7 +89,7 @@ __host__ int main(int argc, char **argv)
   // positions and velocity 3-vectors, 6 orbital elements for each body, mass
   // for each body (so 7 doubles)
   size_t sram_size = sim.num_bodies * sizeof(double3) * 2 +
-                     sim.num_bodies * sizeof(double) * 7; 
+                     sim.num_bodies * sizeof(double) * 7;
 
   if (print_sim_info) std::cout << "Allocating " << sram_size << " bytes of SRAM" << std::endl;
 
