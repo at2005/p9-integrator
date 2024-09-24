@@ -15,8 +15,8 @@ __device__ double* get_pow_two_table() {
   static double pow_two_table[MAX_ROWS_RICHARDSON];
   static bool initialized = false;
   if (!initialized) {
-    for (int i = 1; i < MAX_ROWS_RICHARDSON; i++) {
-      pow_two_table[i] = pow(2, i);
+    for (int i = 0; i < MAX_ROWS_RICHARDSON; i++) {
+      pow_two_table[i] = pow(2, i+1);
     }
     initialized = true;
   }
@@ -662,7 +662,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     __syncthreads();
 
     double semi_major_axis = vec_semi_major_axis[idx];
-    double n = 1.00 / stable_sqrt(semi_major_axis * semi_major_axis * semi_major_axis);
+    double n = rsqrt(semi_major_axis * semi_major_axis * semi_major_axis);
 
     // SOLUTION TO MAIN (largest) HAMILTONIAN
     // if i am undergoing a close encounter with anyone
