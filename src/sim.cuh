@@ -18,7 +18,7 @@ __device__ double *get_pow_two_table()
   {
     for (int i = 1; i < MAX_ROWS_RICHARDSON; i++)
     {
-      pow_two_table[i] = pow(2, i);
+      pow_two_table[i] = exp2(i);
     }
     initialized = true;
   }
@@ -82,10 +82,11 @@ __device__ double danby_burkardt(double mean_anomaly, double eccentricity)
     double e_cos = eccentricity * cos_E;
     double f_prime = 1 - e_cos;
     double dE = -f / f_prime;
-    dE = -f / (f_prime + dE * e_sin / 2.00);
     // higher order convergence only near the end
-    if (i > MAX_ITERATIONS_ROOT_FINDING - 3)
+    if (i > MAX_ITERATIONS_ROOT_FINDING - 2)
     {
+      // cubic convergence
+      dE = -f / (f_prime + dE * e_sin / 2.00);
       // quartic convergence
       dE = -f / ((f_prime + dE * e_sin / 2.00) + (dE * dE * e_cos / 6.00));
       // quintic convergence
@@ -326,15 +327,15 @@ __device__ double3 body_interaction_kick(
     double weighted_acceleration =
         changeover_weight * masses[i] / force_denom;
     // // accumulate total acceleration due to all bodies, except self
-    acc.x += weighted_acceleration * dist.x;
-    acc.y += weighted_acceleration * dist.y;
-    acc.z += weighted_acceleration * dist.z;
+    acc.x = fma(weighted_acceleration, dist.x, acc.x);
+    acc.y = fma(weighted_acceleration, dist.y, acc.y);
+    acc.z = fma(weighted_acceleration, dist.z, acc.z);
   }
 
   // update momenta (velocity here) with total acceleration
-  current_coords.vel.x += acc.x * dt;
-  current_coords.vel.y += acc.y * dt;
-  current_coords.vel.z += acc.z * dt;
+  current_coords.vel.x = fma(acc.x, dt, current_coords.vel.x);
+  current_coords.vel.y = fma(acc.y, dt, current_coords.vel.y);
+  current_coords.vel.z = fma(acc.z, dt, current_coords.vel.z);
   return current_coords.vel;
 }
 
@@ -349,15 +350,15 @@ __device__ double3 main_body_kinetic(const double3 *positions,
   // calculate total momentum of all bodies
   for (int i = 0; i < blockDim.x + 1; i++)
   {
-    p.x += velocities[i].x * masses[i];
-    p.y += velocities[i].y * masses[i];
-    p.z += velocities[i].z * masses[i];
+    p.x = fma(masses[i], velocities[i].x, p.x);
+    p.y = fma(masses[i], velocities[i].y, p.y);
+    p.z = fma(masses[i], velocities[i].z, p.z);
   }
 
   // assume central mass is 1
-  my_position.x += p.x * dt;
-  my_position.y += p.y * dt;
-  my_position.z += p.z * dt;
+  my_position.x = fma(p.x, dt, my_position.x);
+  my_position.y = fma(p.y, dt, my_position.y);
+  my_position.z = fma(p.z, dt, my_position.z);
   return my_position;
 }
 
@@ -393,9 +394,9 @@ __device__ double3 update_my_velocity_total(
                                my_position.y / force_denom,
                                my_position.z / force_denom);
   // negative bc directed inwards
-  my_velocity.x -= r_vec.x * dt;
-  my_velocity.y -= r_vec.y * dt;
-  my_velocity.z -= r_vec.z * dt;
+  my_velocity.x = fma(-r_vec.x, dt, my_velocity.x);
+  my_velocity.y = fma(-r_vec.y, dt, my_velocity.y);
+  my_velocity.z = fma(-r_vec.z, dt, my_velocity.z);
   return my_velocity;
 }
 
@@ -416,9 +417,9 @@ __device__ PosVel modified_midpoint(
   // this sets up z_1 and z_0
   // so we can use z_0 to calc z_2 and use z_1 for z_3
   double3 z_1 = current_coords.pos;
-  z_1.x += current_coords.vel.x * subdelta;
-  z_1.y += current_coords.vel.y * subdelta;
-  z_1.z += current_coords.vel.z * subdelta;
+  z_1.x = fma(current_coords.vel.x, subdelta, z_1.x);
+  z_1.y = fma(current_coords.vel.y, subdelta, z_1.y);
+  z_1.z = fma(current_coords.vel.z, subdelta, z_1.z);
   double double_step = 2 * subdelta;
   double3 z_0 = current_coords.pos;
   current_coords.pos = z_1;
@@ -433,9 +434,9 @@ __device__ PosVel modified_midpoint(
   {
     double3 temp;
     // here we are computing the new (m+1) position
-    temp.x = z_0.x + current_coords.vel.x * double_step;
-    temp.y = z_0.y + current_coords.vel.y * double_step;
-    temp.z = z_0.z + current_coords.vel.z * double_step;
+    temp.x = fma(double_step, current_coords.vel.x, z_0.x);
+    temp.y = fma(double_step, current_coords.vel.y, z_0.y);
+    temp.z = fma(double_step, current_coords.vel.z, z_0.z);
     // so we set this position to be the new z_0
     z_0 = z_1;
     z_1 = temp;
@@ -447,9 +448,9 @@ __device__ PosVel modified_midpoint(
 
   // final little bit
   double3 out;
-  out.x = 0.5 * (z_1.x + z_0.x + current_coords.vel.x * subdelta);
-  out.y = 0.5 * (z_1.y + z_0.y + current_coords.vel.y * subdelta);
-  out.z = 0.5 * (z_1.z + z_0.z + current_coords.vel.z * subdelta);
+  out.x = 0.5 * (z_1.x + fma(current_coords.vel.x, subdelta, z_0.x));
+  out.y = 0.5 * (z_1.y + fma(current_coords.vel.y, subdelta, z_0.y));
+  out.z = 0.5 * (z_1.z + fma(current_coords.vel.z, subdelta, z_0.z));
   PosVel res;
   // store final positions and velocities
   res.pos = out;
@@ -494,19 +495,19 @@ __device__ PosVel richardson_extrapolation(
 
       // for positions
       buffer[i][j].pos.x =
-          pow2 * buffer[i][j - 1].pos.x - buffer[i - 1][j - 1].pos.x;
+          fma(pow2, buffer[i][j - 1].pos.x, -buffer[i - 1][j - 1].pos.x);
       buffer[i][j].pos.y =
-          pow2 * buffer[i][j - 1].pos.y - buffer[i - 1][j - 1].pos.y;
+          fma(pow2, buffer[i][j - 1].pos.y, -buffer[i - 1][j - 1].pos.y);
       buffer[i][j].pos.z =
-          pow2 * buffer[i][j - 1].pos.z - buffer[i - 1][j - 1].pos.z;
+          fma(pow2, buffer[i][j - 1].pos.z, -buffer[i - 1][j - 1].pos.z);
 
       // for velocities
       buffer[i][j].vel.x =
-          pow2 * buffer[i][j - 1].vel.x - buffer[i - 1][j - 1].vel.x;
+          fma(pow2, buffer[i][j - 1].vel.x, -buffer[i - 1][j - 1].vel.x);
       buffer[i][j].vel.y =
-          pow2 * buffer[i][j - 1].vel.y - buffer[i - 1][j - 1].vel.y;
+          fma(pow2, buffer[i][j - 1].vel.y, -buffer[i - 1][j - 1].vel.y);
       buffer[i][j].vel.z =
-          pow2 * buffer[i][j - 1].vel.z - buffer[i - 1][j - 1].vel.z;
+          fma(pow2, buffer[i][j - 1].vel.z, -buffer[i - 1][j - 1].vel.z);
 
       pow2 -= 1;
 
@@ -549,9 +550,9 @@ __device__ void democratic_heliocentric_conversion(
   for (int i = 0; i < blockDim.x; i++)
   {
     total_mass += masses[i];
-    mass_weighted_v.x += masses[i] * velocities[i].x;
-    mass_weighted_v.y += masses[i] * velocities[i].y;
-    mass_weighted_v.z += masses[i] * velocities[i].z;
+    mass_weighted_v.x = fma(masses[i], velocities[i].x, mass_weighted_v.x);
+    mass_weighted_v.y = fma(masses[i], velocities[i].y, mass_weighted_v.y);
+    mass_weighted_v.z = fma(masses[i], velocities[i].z, mass_weighted_v.z);
   }
 
   // prevent race condition, ensure all threads have finished reading old
@@ -566,9 +567,9 @@ __device__ void democratic_heliocentric_conversion(
   mass_weighted_v.z *= scaling_factor;
 
   // if we are performing the reverse conversion, we need to add not subtract
-  velocities[idx].x += add_or_sub * mass_weighted_v.x;
-  velocities[idx].y += add_or_sub * mass_weighted_v.y;
-  velocities[idx].z += add_or_sub * mass_weighted_v.z;
+  velocities[idx].x = fma(add_or_sub, mass_weighted_v.x, velocities[idx].x);
+  velocities[idx].y = fma(add_or_sub, mass_weighted_v.y, velocities[idx].y);
+  velocities[idx].z = fma(add_or_sub, mass_weighted_v.z, velocities[idx].z);
 }
 
 __device__ bool close_encounter_p(
@@ -691,7 +692,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                               vec_semi_major_axis);
       // advance mean anomaly, this is essentially advancing to the next
       // timestep
-      vec_mean_anomaly[idx] = fmod(n * dt + vec_mean_anomaly[idx], TWOPI);
+      vec_mean_anomaly[idx] = fmod(fma(n, dt, vec_mean_anomaly[idx]), TWOPI);
       cartesian_from_elements(vec_inclination,
                               vec_longitude_of_ascending_node,
                               vec_argument_of_perihelion,
