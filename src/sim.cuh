@@ -3,22 +3,24 @@
 #define __SIM_CUH__
 #include "constants.cuh"
 #include "simutils.cuh"
-
 /*
 This file contains the core numerical integration kernel and associated helper
 functions for my implementation of the Mercury N-body Integrator.
 */
 
 // cache powers of two for richardson extrapolation
-__device__ double *get_pow_two_table()
+__device__ uint8_t *get_pow_two_table()
 {
-  static double pow_two_table[MAX_ROWS_RICHARDSON + 1];
+  static uint8_t pow_two_table[MAX_ROWS_RICHARDSON + 1];
   static bool initialized = false;
   if (!initialized)
   {
+    uint8_t n = 2;
+    // so for now this is less than 8 bits
     for (int i = 1; i < MAX_ROWS_RICHARDSON; i++)
     {
-      pow_two_table[i] = exp2(i);
+      pow_two_table[i] = n;
+      n <<= 1;
     }
     initialized = true;
   }
@@ -39,18 +41,19 @@ __device__ double stable_sqrt(double x)
   return sqrt(x * gtz);
 }
 
+__device__ double magnitude_squared(const double3 &a) { 
+  double temp = a.z * a.z; 
+  double temp2 = fma(a.y, a.y, temp);
+  double temp3 = fma(a.x, a.x, temp2);
+  return fma(a.y, temp3, temp);
+}
+
+// compute mag_sq + norm in one
 __device__ void efficient_magnitude(double *mag, double *mag_sq, const double3 &a)
 {
-  *mag_sq = a.x * a.x + a.y * a.y + a.z * a.z;
+  *mag_sq = magnitude_squared(a);
   *mag = stable_sqrt(*mag_sq);
 }
-
-__device__ double magnitude(const double3 &a)
-{
-  return stable_sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
-}
-
-__device__ double magnitude_squared(const double3 &a) { return a.x * a.x + a.y * a.y + a.z * a.z; }
 
 __device__ double stable_acos(double x)
 {
@@ -101,7 +104,7 @@ __device__ double danby_burkardt(double mean_anomaly, double eccentricity)
 
 __device__ double dist(double3 a, double3 b)
 {
-  return magnitude(make_double3(a.x - b.x, a.y - b.y, a.z - b.z));
+  return norm3d(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
 __device__ double fetch_r_crit(
@@ -218,11 +221,11 @@ __device__ void elements_from_cartesian(double3 *current_positions,
   double3 angular_momentum = cross(current_p, current_v);
   double epsilon = 1e-8;
   double h_sq = magnitude_squared(angular_momentum) + epsilon;
-  double inclination = stable_acos(angular_momentum.z / stable_sqrt(h_sq));
+  double inclination = stable_acos(angular_momentum.z * rsqrt(h_sq));
   double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y);
 
   double v_sq = magnitude_squared(current_v);
-  double r = magnitude(current_p);
+  double r = norm3d(current_p.x, current_p.y, current_p.z);
   double s = h_sq;
   double eccentricity = stable_sqrt(1 + s * (v_sq - (2.00 / r)));
   double perihelion_distance = s / (1.00 + eccentricity);
@@ -406,13 +409,13 @@ __device__ PosVel modified_midpoint(
     const double3 *velocities,
     const double *masses,
     double dt,
-    int N)
+    uint8_t N)
 {
   /*
   returns an updated position based on the modified midpoint method.
   */
 
-  double subdelta = dt / N;
+  double subdelta = dt / (double)N;
   // euler step
   // this sets up z_1 and z_0
   // so we can use z_0 to calc z_2 and use z_1 for z_3
@@ -479,8 +482,8 @@ __device__ PosVel richardson_extrapolation(
     const double *masses,
     double dt)
 {
-  double *pow_two_table = get_pow_two_table();
-  int N = 1;
+  uint8_t *pow_two_table = get_pow_two_table();
+  uint8_t N = 1;
   PosVel out;
   PosVel buffer[MAX_ROWS_RICHARDSON][MAX_ROWS_RICHARDSON];
   // for our first approx, we use the OG dt
@@ -587,7 +590,7 @@ __device__ bool close_encounter_p(
     r_ij.x = positions[i].x - positions[idx].x;
     r_ij.y = positions[i].y - positions[idx].y;
     r_ij.z = positions[i].z - positions[idx].z;
-    double r_ij_mag = magnitude(r_ij);
+    double r_ij_mag = norm3d(r_ij.x, r_ij.y, r_ij.z);
     double r_crit = fetch_r_crit((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, i, dt);
     if (r_ij_mag < r_crit)
     {
