@@ -101,6 +101,8 @@ __host__ int main(int argc, char **argv)
   size_t max_sram = 227 * 1024;
   cudaFuncSetAttribute(mercurius_solver, cudaFuncAttributeMaxDynamicSharedMemorySize, max_sram);
 
+  uint8_t *powers_of_two_table_device = get_pow_two_table();
+
   for (int batch = 0; batch < NUM_ITERS; batch++)
   {
     mercurius_solver<<<1, sim.num_bodies, sram_size>>>(
@@ -112,6 +114,7 @@ __host__ int main(int argc, char **argv)
         vec_longitude_of_ascending_node_device,
         masses_device,
         output_positions_device,
+        powers_of_two_table_device,
         dt);
 
     if (print_sim_info) std::cout << "Batch " << (batch + 1) << " Simulation Complete. Synchronizing...\n";

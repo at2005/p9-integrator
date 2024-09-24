@@ -8,25 +8,6 @@ This file contains the core numerical integration kernel and associated helper
 functions for my implementation of the Mercury N-body Integrator.
 */
 
-// cache powers of two for richardson extrapolation
-__device__ uint8_t *get_pow_two_table()
-{
-  static uint8_t pow_two_table[MAX_ROWS_RICHARDSON + 1];
-  static bool initialized = false;
-  if (!initialized)
-  {
-    uint8_t n = 2;
-    // so for now this is less than 8 bits
-    for (int i = 1; i < MAX_ROWS_RICHARDSON; i++)
-    {
-      pow_two_table[i] = n;
-      n <<= 1;
-    }
-    initialized = true;
-  }
-  return pow_two_table;
-}
-
 __device__ double3 cross(const double3 &a, const double3 &b)
 {
   return make_double3(a.y * b.z - a.z * b.y,
@@ -481,9 +462,9 @@ __device__ PosVel richardson_extrapolation(
     const double3 *positions,
     const double3 *velocities,
     const double *masses,
+    uint8_t *pow_two_table,
     double dt)
 {
-  uint8_t *pow_two_table = get_pow_two_table();
   uint8_t N = 1;
   PosVel out;
   PosVel buffer[MAX_ROWS_RICHARDSON][MAX_ROWS_RICHARDSON];
@@ -609,10 +590,12 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double *vec_longitude_of_ascending_node_hbm,
                                  double *vec_masses_hbm,
                                  double3 *output_positions,
+                                 uint8_t *pow_two_table,
                                  double dt)
 
 {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
+
   // declare SRAM buffer
   extern __shared__ char total_memory[];
   double3 *positions = (double3 *)total_memory;
@@ -680,7 +663,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
       // directly updates positions and velocities by dt
       numerical_soln_to_close_encounter =
           // modified_midpoint((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt, 1);
-          richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt);
+          richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, pow_two_table, dt);
     }
     else
     {
