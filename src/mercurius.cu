@@ -88,36 +88,18 @@ __host__ int main(int argc, char **argv)
 
   // positions and velocity 3-vectors, 6 orbital elements for each body, mass
   // for each body (so 7 doubles)
-  size_t max_sram = 227 * 1024;
-  cudaError_t err = cudaFuncSetAttribute(mercurius_solver, cudaFuncAttributeMaxDynamicSharedMemorySize, max_sram);
-  if(err != cudaSuccess) {
-    std::cout << "Error setting max shared memory size: " << cudaGetErrorString(err) << std::endl;
-    exit(1);
-  }
-
-  std::vector<int> massive_body_indices = {};
-  for (int i = 0; i < sim.num_bodies; i++)
-  {
-    if (sim.masses[i] > 1e-12)
-    {
-      massive_body_indices.push_back(i);
-    }
-  }
-
-  // allocate device memory for a list of massive bodies (ie the ones we need to care about in interactions)
-  int *massive_body_indices_device;
-  cudaMalloc((void **)&massive_body_indices_device, massive_body_indices.size() * sizeof(int));
-  cudaMemcpy(massive_body_indices_device, massive_body_indices.data(), massive_body_indices.size() * sizeof(int), cudaMemcpyHostToDevice);
-
   size_t sram_size = sim.num_bodies * sizeof(double3) * 2 +
-                     sim.num_bodies * sizeof(double) * 7 + sizeof(int) * massive_body_indices.size();
-  
+                     sim.num_bodies * sizeof(double) * 7;
+
   if (print_sim_info) std::cout << "Allocating " << sram_size << " bytes of SRAM" << std::endl;
-  
+
   // ie after BATCH_SIZE timesteps, we want to print the output
   // and run kernel with updated orbital elements this is to save memory
   int NUM_ITERS = NUM_TIMESTEPS > BATCH_SIZE ? NUM_TIMESTEPS / BATCH_SIZE : NUM_TIMESTEPS;
   if (NUM_TIMESTEPS > BATCH_SIZE) assert(NUM_TIMESTEPS % BATCH_SIZE == 0);
+
+  size_t max_sram = 227 * 1024;
+  cudaFuncSetAttribute(mercurius_solver, cudaFuncAttributeMaxDynamicSharedMemorySize, max_sram);
 
   for (int batch = 0; batch < NUM_ITERS; batch++)
   {
@@ -130,8 +112,6 @@ __host__ int main(int argc, char **argv)
         vec_longitude_of_ascending_node_device,
         masses_device,
         output_positions_device,
-        massive_body_indices_device,
-        massive_body_indices.size(),
         dt);
 
     if (print_sim_info) std::cout << "Batch " << (batch + 1) << " Simulation Complete. Synchronizing...\n";

@@ -267,8 +267,6 @@ __device__ double3 body_interaction_kick(
     const double3 *positions,
     const double3 *velocities,
     const double *masses,
-    int *massive_body_indices,
-    int num_massive_bodies,
     double dt,
     bool possible_close_encounter = false)
 {
@@ -276,23 +274,22 @@ __device__ double3 body_interaction_kick(
   const double3 my_position = current_coords.pos;
   double3 acc = make_double3(0.0, 0.0, 0.0);
   double3 dist;
-  for (int _ = 0; _ < num_massive_bodies; _++)
+  for (int i = 0; i < blockDim.x; i++)
   {
-    int massive_body_idx = massive_body_indices[_];
-    if (massive_body_idx == idx) continue;
+    if (i == idx) continue;
     // 3-vec displacement, let r = x, y, z, this is the direction of the
     // acceleration it is directed towards the other body since gravity is
     // attractive
-    dist.x = positions[massive_body_idx].x - my_position.x;
-    dist.y = positions[massive_body_idx].y - my_position.y;
-    dist.z = positions[massive_body_idx].z - my_position.z;
+    dist.x = positions[i].x - my_position.x;
+    dist.y = positions[i].y - my_position.y;
+    dist.z = positions[i].z - my_position.z;
 
     double r_sq;
     double r;
     efficient_magnitude(&r, &r_sq, dist);
 
     // compute both K and r_crit
-    KR_Crit changeover_vals = changeover(current_coords, positions, velocities, masses, massive_body_idx, dt);
+    KR_Crit changeover_vals = changeover(current_coords, positions, velocities, masses, i, dt);
 
     double changeover_weight = changeover_vals.K;
     double r_crit = changeover_vals.r_crit;
@@ -306,13 +303,14 @@ __device__ double3 body_interaction_kick(
     }
 
     // add smoothing constant
+
     r_sq += SMOOTHING_CONSTANT_SQUARED;
     // the (r^2 + s^2) comes from inv sq law w/ smoothing, and the other r bc
     // direction is normalized
     double force_denom = r_sq * r;
 
     double weighted_acceleration =
-        changeover_weight * masses[massive_body_idx] / force_denom;
+        changeover_weight * masses[i] / force_denom;
     // // accumulate total acceleration due to all bodies, except self
     acc.x = fma(weighted_acceleration, dist.x, acc.x);
     acc.y = fma(weighted_acceleration, dist.y, acc.y);
@@ -329,20 +327,17 @@ __device__ double3 body_interaction_kick(
 __device__ double3 main_body_kinetic(const double3 *positions,
                                      const double3 *velocities,
                                      const double *masses,
-                                     int *massive_body_indices,
-                                     int num_massive_bodies,
                                      double dt)
 {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   double3 my_position = positions[idx];
   double3 p = make_double3(0.0, 0.0, 0.0);
   // calculate total momentum of all bodies
-  for (int _ = 0; _ < num_massive_bodies; _++)
+  for (int i = 0; i < blockDim.x; i++)
   {
-    int massive_body_idx = massive_body_indices[_];
-    p.x = fma(masses[massive_body_idx], velocities[massive_body_idx].x, p.x);
-    p.y = fma(masses[massive_body_idx], velocities[massive_body_idx].y, p.y);
-    p.z = fma(masses[massive_body_idx], velocities[massive_body_idx].z, p.z);
+    p.x = fma(masses[i], velocities[i].x, p.x);
+    p.y = fma(masses[i], velocities[i].y, p.y);
+    p.z = fma(masses[i], velocities[i].z, p.z);
   }
 
   // assume central mass is 1
@@ -359,8 +354,6 @@ __device__ double3 update_my_velocity_total(
     const double3 *positions,
     const double3 *velocities,
     const double *masses,
-    int *massive_body_indices,
-    int num_massive_bodies,
     double dt)
 
 {
@@ -372,8 +365,7 @@ __device__ double3 update_my_velocity_total(
   const double3 my_position = current_coords.pos;
   // the body interaction kick updates velocities based on the masses of all
   // minor bodies
-  // double3 my_velocity = body_interaction_kick(current_coords, positions, velocities, masses, dt, true);
-  double3 my_velocity = body_interaction_kick(current_coords, positions, velocities, masses, massive_body_indices, num_massive_bodies, dt, true);
+  double3 my_velocity = body_interaction_kick(current_coords, positions, velocities, masses, dt, true);
   // now for the main body:
   // update acceleration due to main body
   // a = - G * M / r^3 * r, which in this case simplifies to 1/(r^3) * r_vec
@@ -398,8 +390,6 @@ __device__ PosVel modified_midpoint(
     const double3 *positions,
     const double3 *velocities,
     const double *masses,
-    int *massive_body_indices,
-    int num_massive_bodies,
     double dt,
     uint32_t N)
 {
@@ -419,8 +409,7 @@ __device__ PosVel modified_midpoint(
   double3 z_0 = current_coords.pos;
   current_coords.pos = z_1;
   current_coords.vel =
-      update_my_velocity_total(current_coords, positions, velocities, masses, massive_body_indices, num_massive_bodies, subdelta);
-      // update_my_velocity_total(current_coords, positions, velocities, masses, subdelta);
+      update_my_velocity_total(current_coords, positions, velocities, masses, subdelta);
 
   // so now, we need to calculate z_(m+1) using z_(m-1)
   // we can store z_(m-1) in z_0 and z_(m+1) in z_1
@@ -439,8 +428,7 @@ __device__ PosVel modified_midpoint(
     current_coords.pos = z_1;
     // update velocities
     current_coords.vel =
-        // update_my_velocity_total(current_coords, positions, velocities, masses, subdelta);
-        update_my_velocity_total(current_coords, positions, velocities, masses, massive_body_indices, num_massive_bodies, subdelta);
+        update_my_velocity_total(current_coords, positions, velocities, masses, subdelta);
   }
 
   // final little bit
@@ -474,22 +462,18 @@ __device__ PosVel richardson_extrapolation(
     const double3 *positions,
     const double3 *velocities,
     const double *masses,
-    int *massive_body_indices,
-    int num_massive_bodies,
     double dt)
 {
   uint32_t N = 1;
   PosVel out;
   PosVel buffer[MAX_ROWS_RICHARDSON][MAX_ROWS_RICHARDSON];
   // for our first approx, we use the OG dt
-  // buffer[0][0] = modified_midpoint(current_coords, positions, velocities, masses, dt, N);
-  buffer[0][0] = modified_midpoint(current_coords, positions, velocities, masses, massive_body_indices, num_massive_bodies, dt, N);
+  buffer[0][0] = modified_midpoint(current_coords, positions, velocities, masses, dt, N);
   for (int i = 1; i < MAX_ROWS_RICHARDSON; i++)
   {
     N <<= 1;
     // N = pow(2, i);
-    // buffer[i][0] = modified_midpoint(current_coords, positions, velocities, masses, dt, N);
-    buffer[i][0] = modified_midpoint(current_coords, positions, velocities, masses, massive_body_indices, num_massive_bodies, dt, N);
+    buffer[i][0] = modified_midpoint(current_coords, positions, velocities, masses, dt, N);
 
     for (int j = 1; j <= i; j++)
     {
@@ -575,22 +559,19 @@ __device__ bool close_encounter_p(
     double3 *positions,
     double3 *velocities,
     double *masses,
-    int *massive_body_indices,
-    int num_massive_bodies,
     double dt)
 {
   // get indices of bodies i am undergoing close encounters with
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  for (int i = 0; i < num_massive_bodies; i++)
+  for (int i = 0; i < blockDim.x; i++)
   {
-    int massive_body_idx = massive_body_indices[i];
-    if (massive_body_idx == idx) continue;
+    if (i == idx) continue;
     double3 r_ij;
-    r_ij.x = positions[massive_body_idx].x - positions[idx].x;
-    r_ij.y = positions[massive_body_idx].y - positions[idx].y;
-    r_ij.z = positions[massive_body_idx].z - positions[idx].z;
+    r_ij.x = positions[i].x - positions[idx].x;
+    r_ij.y = positions[i].y - positions[idx].y;
+    r_ij.z = positions[i].z - positions[idx].z;
     double r_ij_mag = norm3d(r_ij.x, r_ij.y, r_ij.z);
-    double r_crit = fetch_r_crit((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, massive_body_idx, dt);
+    double r_crit = fetch_r_crit((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, i, dt);
     if (r_ij_mag < r_crit)
     {
       return true;
@@ -607,8 +588,6 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double *vec_longitude_of_ascending_node_hbm,
                                  double *vec_masses_hbm,
                                  double3 *output_positions,
-                                 int *massive_body_indices_hbm,
-                                 int num_massive_bodies,
                                  double dt)
 
 {
@@ -628,7 +607,6 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
       (double *)(vec_argument_of_perihelion + blockDim.x);
   double *vec_eccentricity = (double *)(vec_mean_anomaly + blockDim.x);
   double *vec_semi_major_axis = (double *)(vec_eccentricity + blockDim.x);
-  int *massive_body_indices = (int *)(vec_semi_major_axis + blockDim.x);
 
   masses[idx] = vec_masses_hbm[idx];
   vec_argument_of_perihelion[idx] = vec_argument_of_perihelion_hbm[idx];
@@ -638,16 +616,6 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   vec_inclination[idx] = vec_inclination_hbm[idx];
   vec_longitude_of_ascending_node[idx] =
       vec_longitude_of_ascending_node_hbm[idx];
-
-  __syncthreads();
-  // copy massive body indices to SRAM
-  if (idx == 0) {
-    for (int i = 0; i < num_massive_bodies; i++) {
-      massive_body_indices[i] = massive_body_indices_hbm[i];
-    }
-  }
-
-  __syncthreads();
 
   double half_dt = 0.5 * dt;
   // initially populate positions and velocities
@@ -668,14 +636,12 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // first "kicks"
     __syncthreads();
     double3 velocity_after_body_interaction =
-        // body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, half_dt);
-        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, massive_body_indices, num_massive_bodies, half_dt);
+        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, half_dt);
     __syncthreads();
     velocities[idx] = velocity_after_body_interaction;
     __syncthreads();
     double3 position_after_main_body_kick =
-        // main_body_kinetic(positions, velocities, masses, half_dt);
-        main_body_kinetic(positions, velocities, masses, massive_body_indices, num_massive_bodies, half_dt);
+        main_body_kinetic(positions, velocities, masses, half_dt);
     __syncthreads();
     positions[idx] = position_after_main_body_kick;
     __syncthreads();
@@ -688,15 +654,13 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // use bulirsch-stoer aka richardson extrapolation w/ mod midpoint
     PosVel numerical_soln_to_close_encounter;
     bool is_close_encounter =
-        close_encounter_p(positions, velocities, masses, massive_body_indices, num_massive_bodies, dt);
-        // close_encounter_p(positions, velocities, masses, dt);
+        close_encounter_p(positions, velocities, masses, dt);
     if (is_close_encounter)
     {
       // directly updates positions and velocities by dt
       numerical_soln_to_close_encounter =
           // modified_midpoint((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt, 1);
-          // richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt);
-          richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, massive_body_indices, num_massive_bodies, dt);
+          richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt);
     }
     else
     {
@@ -750,14 +714,12 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // final "kicks"
     __syncthreads();
     position_after_main_body_kick =
-        main_body_kinetic(positions, velocities, masses, massive_body_indices, num_massive_bodies, half_dt);
-        // main_body_kinetic(positions, velocities, masses, half_dt);
+        main_body_kinetic(positions, velocities, masses, half_dt);
     __syncthreads();
     positions[idx] = position_after_main_body_kick;
     __syncthreads();
     velocity_after_body_interaction =
-        // body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, half_dt);
-        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, massive_body_indices, num_massive_bodies, half_dt);
+        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, half_dt);
     __syncthreads();
     velocities[idx] = velocity_after_body_interaction;
 
