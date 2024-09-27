@@ -29,6 +29,7 @@ def planetesimal_setup_config():
             "mean_anomaly": np.random.uniform(0, 2*np.pi)
         })
 
+    config_dict["bodies"].sort(key=lambda x: x["mass"], reverse=True)
 
     # write to file
     with open("../examples/planetary_embryos.json", "w") as f:
@@ -40,7 +41,7 @@ def p9_setup_config():
     Generates a JSON config file for TNOs as described in
     https://arxiv.org/pdf/2108.09868
     """
-    num_bodies = 1024
+    num_bodies = 630
     a_upper = 500
     a_lower = 150
     a_spacing = (a_upper - a_lower) / num_bodies

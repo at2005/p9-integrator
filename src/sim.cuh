@@ -260,6 +260,7 @@ __device__ double3 body_interaction_kick(
     const double3 *positions,
     const double3 *velocities,
     const double *masses,
+    int num_massive_bodies,
     double dt,
     bool possible_close_encounter = false)
 {
@@ -267,7 +268,7 @@ __device__ double3 body_interaction_kick(
   const double3 my_position = current_coords.pos;
   double3 acc = make_double3(0.0, 0.0, 0.0);
   double3 dist;
-  for (int i = 0; i < blockDim.x; i++)
+  for (int i = 0; i < num_massive_bodies; i++)
   {
     if (i == idx) continue;
     // 3-vec displacement, let r = x, y, z, this is the direction of the
@@ -320,13 +321,14 @@ __device__ double3 body_interaction_kick(
 __device__ double3 main_body_kinetic(const double3 *positions,
                                      const double3 *velocities,
                                      const double *masses,
+                                     int num_massive_bodies,
                                      double dt)
 {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   double3 my_position = positions[idx];
   double3 p = make_double3(0.0, 0.0, 0.0);
   // calculate total momentum of all bodies
-  for (int i = 0; i < blockDim.x; i++)
+  for (int i = 0; i < num_massive_bodies; i++)
   {
     p.x = fma(masses[i], velocities[i].x, p.x);
     p.y = fma(masses[i], velocities[i].y, p.y);
@@ -347,6 +349,7 @@ __device__ double3 update_my_velocity_total(
     const double3 *positions,
     const double3 *velocities,
     const double *masses,
+    int num_massive_bodies,
     double dt)
 
 {
@@ -358,7 +361,7 @@ __device__ double3 update_my_velocity_total(
   const double3 my_position = current_coords.pos;
   // the body interaction kick updates velocities based on the masses of all
   // minor bodies
-  double3 my_velocity = body_interaction_kick(current_coords, positions, velocities, masses, dt, true);
+  double3 my_velocity = body_interaction_kick(current_coords, positions, velocities, masses, num_massive_bodies, dt, true);
   // now for the main body:
   // update acceleration due to main body
   // a = - G * M / r^3 * r, which in this case simplifies to 1/(r^3) * r_vec
@@ -383,6 +386,7 @@ __device__ PosVel modified_midpoint(
     const double3 *positions,
     const double3 *velocities,
     const double *masses,
+    int num_massive_bodies,
     double dt,
     int N)
 {
@@ -402,7 +406,7 @@ __device__ PosVel modified_midpoint(
   double3 z_0 = current_coords.pos;
   current_coords.pos = z_1;
   current_coords.vel =
-      update_my_velocity_total(current_coords, positions, velocities, masses, subdelta);
+      update_my_velocity_total(current_coords, positions, velocities, masses, num_massive_bodies, subdelta);
 
   // so now, we need to calculate z_(m+1) using z_(m-1)
   // we can store z_(m-1) in z_0 and z_(m+1) in z_1
@@ -421,7 +425,7 @@ __device__ PosVel modified_midpoint(
     current_coords.pos = z_1;
     // update velocities
     current_coords.vel =
-        update_my_velocity_total(current_coords, positions, velocities, masses, subdelta);
+        update_my_velocity_total(current_coords, positions, velocities, masses, num_massive_bodies, subdelta);
   }
 
   // final little bit
@@ -455,18 +459,19 @@ __device__ PosVel richardson_extrapolation(
     const double3 *positions,
     const double3 *velocities,
     const double *masses,
+    int num_massive_bodies,
     double dt)
 {
   uint32_t N = 1;
   PosVel out;
   PosVel buffer[MAX_ROWS_RICHARDSON][MAX_ROWS_RICHARDSON];
   // for our first approx, we use the OG dt
-  buffer[0][0] = modified_midpoint(current_coords, positions, velocities, masses, dt, N);
+  buffer[0][0] = modified_midpoint(current_coords, positions, velocities, masses, num_massive_bodies, dt, N);
   for (int i = 1; i < MAX_ROWS_RICHARDSON; i++)
   {
     N <<= 1;
     // N = pow(2, i);
-    buffer[i][0] = modified_midpoint(current_coords, positions, velocities, masses, dt, N);
+    buffer[i][0] = modified_midpoint(current_coords, positions, velocities, masses, num_massive_bodies, dt, N);
 
     for (int j = 1; j <= i; j++)
     {
@@ -515,6 +520,7 @@ __device__ void democratic_heliocentric_conversion(
     double3 *positions,
     double3 *velocities,
     double *masses,
+    int num_massive_bodies,
     bool reverse = false)
 {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
@@ -523,12 +529,13 @@ __device__ void democratic_heliocentric_conversion(
   double add_or_sub = pow(-1, not_reverse_d);
 
   double3 mass_weighted_v = make_double3(0.0, 0.0, 0.0);
-  for (int i = 0; i < blockDim.x; i++)
+  for (int i = 0; i < num_massive_bodies; i++)
   {
-    total_mass += masses[i];
-    mass_weighted_v.x = fma(masses[i], velocities[i].x, mass_weighted_v.x);
-    mass_weighted_v.y = fma(masses[i], velocities[i].y, mass_weighted_v.y);
-    mass_weighted_v.z = fma(masses[i], velocities[i].z, mass_weighted_v.z);
+    int true_idx = i;
+    total_mass += masses[true_idx];
+    mass_weighted_v.x = fma(masses[true_idx], velocities[true_idx].x, mass_weighted_v.x);
+    mass_weighted_v.y = fma(masses[true_idx], velocities[true_idx].y, mass_weighted_v.y);
+    mass_weighted_v.z = fma(masses[true_idx], velocities[true_idx].z, mass_weighted_v.z);
   }
 
   // prevent race condition, ensure all threads have finished reading old
@@ -552,11 +559,12 @@ __device__ bool close_encounter_p(
     double3 *positions,
     double3 *velocities,
     double *masses,
+    int num_massive_bodies,
     double dt)
 {
   // get indices of bodies i am undergoing close encounters with
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  for (int i = 0; i < blockDim.x; i++)
+  for (int i = 0; i < num_massive_bodies; i++)
   {
     if (i == idx) continue;
     double3 r_ij;
@@ -581,6 +589,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double *vec_longitude_of_ascending_node_hbm,
                                  double *vec_masses_hbm,
                                  double3 *output_positions,
+                                 int num_massive_bodies,
                                  double dt)
 
 {
@@ -592,6 +601,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   double3 *positions = (double3 *)total_memory;
   double3 *velocities = (double3 *)(positions + blockDim.x);
   double *masses = (double *)(velocities + blockDim.x);
+  //(uint64_t *)(masses + blockDim.x);
   __syncthreads();
 
   masses[idx] = vec_masses_hbm[idx];
@@ -616,19 +626,19 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   velocities[idx] = pos_vel.vel;
   __syncthreads();
   // convert to democratic heliocentric coordinates
-  democratic_heliocentric_conversion(positions, velocities, masses);
+  democratic_heliocentric_conversion(positions, velocities, masses, num_massive_bodies);
 
   for (int i = 0; i < BATCH_SIZE; i++)
   {
     // first "kicks"
     __syncthreads();
     double3 velocity_after_body_interaction =
-        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, half_dt);
+        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, num_massive_bodies, half_dt);
     __syncthreads();
     velocities[idx] = velocity_after_body_interaction;
     __syncthreads();
     double3 position_after_main_body_kick =
-        main_body_kinetic(positions, velocities, masses, half_dt);
+        main_body_kinetic(positions, velocities, masses, num_massive_bodies, half_dt);
     __syncthreads();
     positions[idx] = position_after_main_body_kick;
     __syncthreads();
@@ -640,13 +650,12 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // use bulirsch-stoer aka richardson extrapolation w/ mod midpoint
     PosVel numerical_soln_to_close_encounter = PosVel{.pos = make_double3(0.0, 0.0, 0.0), .vel = make_double3(0.0, 0.0, 0.0)};
     PosVel analyical_soln_to_kepler = PosVel{.pos = make_double3(0.0, 0.0, 0.0), .vel = make_double3(0.0, 0.0, 0.0)};
-    bool is_close_encounter = close_encounter_p(positions, velocities, masses, dt);
+    bool is_close_encounter = close_encounter_p(positions, velocities, masses, num_massive_bodies, dt);
     __syncthreads();
 
     // directly updates positions and velocities by dt
     numerical_soln_to_close_encounter =
-        modified_midpoint((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt, 5);
-    // richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt);
+    richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, num_massive_bodies, dt);
 
     __syncthreads();
 
@@ -697,12 +706,12 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // final "kicks"
     __syncthreads();
     position_after_main_body_kick =
-        main_body_kinetic(positions, velocities, masses, half_dt);
+        main_body_kinetic(positions, velocities, masses, num_massive_bodies, half_dt);
     __syncthreads();
     positions[idx] = position_after_main_body_kick;
     __syncthreads();
     velocity_after_body_interaction =
-        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, half_dt);
+        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, num_massive_bodies, half_dt);
     __syncthreads();
     velocities[idx] = velocity_after_body_interaction;
 
@@ -716,7 +725,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
 
   __syncthreads();
   // convert back to heliocentric coordinates
-  democratic_heliocentric_conversion(positions, velocities, masses, true);
+  democratic_heliocentric_conversion(positions, velocities, masses, num_massive_bodies, true);
   // convert back to elements
   elements_from_cartesian(positions,
                           velocities,
