@@ -655,7 +655,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
 
     // directly updates positions and velocities by dt
     numerical_soln_to_close_encounter =
-    richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, num_massive_bodies, dt);
+        richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, num_massive_bodies, dt);
 
     __syncthreads();
 

@@ -77,7 +77,6 @@ __host__ int main(int argc, char **argv)
              sim.masses,
              sim.num_bodies * sizeof(double),
              cudaMemcpyHostToDevice);
-  
 
   // print sim information
   if (print_sim_info)
@@ -92,7 +91,7 @@ __host__ int main(int argc, char **argv)
   {
     if (sim.masses[i] > 1e-12)
     {
-      num_massive_bodies += 1; 
+      num_massive_bodies += 1;
     }
   }
 
@@ -109,8 +108,8 @@ __host__ int main(int argc, char **argv)
 
   for (int batch = 0; batch < NUM_ITERS; batch++)
   {
-  int max_sram = 98304;//228 * 1024;
-  cudaFuncSetAttribute(mercurius_solver, cudaFuncAttributeMaxDynamicSharedMemorySize, max_sram);
+    int max_sram = 98304;  // 228 * 1024;
+    cudaFuncSetAttribute(mercurius_solver, cudaFuncAttributeMaxDynamicSharedMemorySize, max_sram);
     mercurius_solver<<<1, sim.num_bodies, sram_size>>>(
         vec_argument_of_perihelion_device,
         vec_mean_anomaly_device,
@@ -120,7 +119,7 @@ __host__ int main(int argc, char **argv)
         vec_longitude_of_ascending_node_device,
         masses_device,
         output_positions_device,
-        num_massive_bodies, 
+        num_massive_bodies,
         dt);
 
     if (print_sim_info) std::cout << "Batch " << (batch + 1) << " Simulation Complete. Synchronizing...\n";
