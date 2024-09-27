@@ -136,23 +136,14 @@ __device__ KR_Crit changeover(
   return res;
 }
 
-__device__ void cartesian_from_elements(double *vec_inclination,
-                                        double *vec_longitude_of_ascending_node,
-                                        double *vec_argument_of_perihelion,
-                                        double *vec_mean_anomaly,
-                                        double *vec_eccentricity,
-                                        double *vec_semi_major_axis,
-                                        double3 *current_positions,
-                                        double3 *current_velocities)
-{
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
-  double inclination = vec_inclination[idx];
-  double longitude_of_ascending_node = vec_longitude_of_ascending_node[idx];
-  double argument_of_perihelion = vec_argument_of_perihelion[idx];
-  double mean_anomaly = vec_mean_anomaly[idx];
-  double eccentricity = vec_eccentricity[idx];
-  double semi_major_axis = vec_semi_major_axis[idx];
+__device__ PosVel cartesian_from_elements(double inclination,
+                                          double longitude_of_ascending_node,
+                                          double argument_of_perihelion,
+                                          double mean_anomaly,
+                                          double eccentricity,
+                                          double semi_major_axis)
 
+{
   double cos_i, sin_i, cos_o, sin_o, cos_a, sin_a;
   sincos(inclination, &sin_i, &cos_i);
   sincos(longitude_of_ascending_node, &sin_o, &cos_o);
@@ -179,23 +170,25 @@ __device__ void cartesian_from_elements(double *vec_inclination,
       stable_sqrt(1.00 / semi_major_axis) / (1.0 - eccentricity * cos_e);
   z3 = -sin_e * eccentric_anomaly;
   z4 = romes * cos_e * eccentric_anomaly;
+  PosVel res;
+  res.pos = make_double3(d11 * z1 + d21 * z2,
+                         d12 * z1 + d22 * z2,
+                         d13 * z1 + d23 * z2);
+  res.vel = make_double3(d11 * z3 + d21 * z4,
+                         d12 * z3 + d22 * z4,
+                         d13 * z3 + d23 * z4);
 
-  current_positions[idx] = make_double3(d11 * z1 + d21 * z2,
-                                        d12 * z1 + d22 * z2,
-                                        d13 * z1 + d23 * z2);
-  current_velocities[idx] = make_double3(d11 * z3 + d21 * z4,
-                                         d12 * z3 + d22 * z4,
-                                         d13 * z3 + d23 * z4);
+  return res;
 }
 
 __device__ void elements_from_cartesian(double3 *current_positions,
                                         double3 *current_velocities,
-                                        double *vec_inclination,
-                                        double *vec_longitude_of_ascending_node,
-                                        double *vec_argument_of_perihelion,
-                                        double *vec_mean_anomaly,
-                                        double *vec_eccentricity,
-                                        double *vec_semi_major_axis)
+                                        double *current_inclination,
+                                        double *current_longitude_of_ascending_node,
+                                        double *current_argument_of_perihelion,
+                                        double *current_mean_anomaly,
+                                        double *current_eccentricity,
+                                        double *current_semi_major_axis)
 {
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
   double3 current_p = current_positions[idx];
@@ -252,12 +245,12 @@ __device__ void elements_from_cartesian(double3 *current_positions,
   double argument_of_perihelion = p - longitude_of_ascending_node;
   double semi_major_axis = perihelion_distance / (1.00 - eccentricity);
 
-  vec_inclination[idx] = inclination;
-  vec_longitude_of_ascending_node[idx] = longitude_of_ascending_node;
-  vec_argument_of_perihelion[idx] = argument_of_perihelion;
-  vec_mean_anomaly[idx] = M_anomaly;
-  vec_eccentricity[idx] = eccentricity;
-  vec_semi_major_axis[idx] = semi_major_axis;
+  *current_inclination = inclination;
+  *current_longitude_of_ascending_node = longitude_of_ascending_node;
+  *current_argument_of_perihelion = argument_of_perihelion;
+  *current_mean_anomaly = M_anomaly;
+  *current_eccentricity = eccentricity;
+  *current_semi_major_axis = semi_major_axis;
 }
 
 // this function returns an updated velocity
@@ -391,7 +384,7 @@ __device__ PosVel modified_midpoint(
     const double3 *velocities,
     const double *masses,
     double dt,
-    uint32_t N)
+    int N)
 {
   /*
   returns an updated position based on the modified midpoint method.
@@ -595,38 +588,32 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
 
   // declare SRAM buffer
   extern __shared__ char total_memory[];
+  __syncthreads();
   double3 *positions = (double3 *)total_memory;
   double3 *velocities = (double3 *)(positions + blockDim.x);
   double *masses = (double *)(velocities + blockDim.x);
-  double *vec_inclination = (double *)(masses + blockDim.x);
-  double *vec_longitude_of_ascending_node =
-      (double *)(vec_inclination + blockDim.x);
-  double *vec_argument_of_perihelion =
-      (double *)(vec_longitude_of_ascending_node + blockDim.x);
-  double *vec_mean_anomaly =
-      (double *)(vec_argument_of_perihelion + blockDim.x);
-  double *vec_eccentricity = (double *)(vec_mean_anomaly + blockDim.x);
-  double *vec_semi_major_axis = (double *)(vec_eccentricity + blockDim.x);
+  __syncthreads();
 
   masses[idx] = vec_masses_hbm[idx];
-  vec_argument_of_perihelion[idx] = vec_argument_of_perihelion_hbm[idx];
-  vec_mean_anomaly[idx] = vec_mean_anomaly_hbm[idx];
-  vec_eccentricity[idx] = vec_eccentricity_hbm[idx];
-  vec_semi_major_axis[idx] = vec_semi_major_axis_hbm[idx];
-  vec_inclination[idx] = vec_inclination_hbm[idx];
-  vec_longitude_of_ascending_node[idx] =
-      vec_longitude_of_ascending_node_hbm[idx];
+  double argument_of_perihelion = vec_argument_of_perihelion_hbm[idx];
+  double mean_anomaly = vec_mean_anomaly_hbm[idx];
+  double eccentricity = vec_eccentricity_hbm[idx];
+  double semi_major_axis = vec_semi_major_axis_hbm[idx];
+  double inclination = vec_inclination_hbm[idx];
+  double longitude_of_ascending_node = vec_longitude_of_ascending_node_hbm[idx];
 
   double half_dt = 0.5 * dt;
   // initially populate positions and velocities
-  cartesian_from_elements(vec_inclination,
-                          vec_longitude_of_ascending_node,
-                          vec_argument_of_perihelion,
-                          vec_mean_anomaly,
-                          vec_eccentricity,
-                          vec_semi_major_axis,
-                          positions,
-                          velocities);
+  PosVel pos_vel = cartesian_from_elements(inclination,
+                                           longitude_of_ascending_node,
+                                           argument_of_perihelion,
+                                           mean_anomaly,
+                                           eccentricity,
+                                           semi_major_axis);
+
+  __syncthreads();
+  positions[idx] = pos_vel.pos;
+  velocities[idx] = pos_vel.vel;
   __syncthreads();
   // convert to democratic heliocentric coordinates
   democratic_heliocentric_conversion(positions, velocities, masses);
@@ -646,68 +633,64 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     positions[idx] = position_after_main_body_kick;
     __syncthreads();
 
-    double semi_major_axis = vec_semi_major_axis[idx];
     double n = rsqrt(semi_major_axis * semi_major_axis * semi_major_axis);
 
     // SOLUTION TO MAIN (largest) HAMILTONIAN
     // if i am undergoing a close encounter with anyone
     // use bulirsch-stoer aka richardson extrapolation w/ mod midpoint
-    PosVel numerical_soln_to_close_encounter;
-    bool is_close_encounter =
-        close_encounter_p(positions, velocities, masses, dt);
-    if (is_close_encounter)
-    {
-      // directly updates positions and velocities by dt
-      numerical_soln_to_close_encounter =
-          // modified_midpoint((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt, 1);
-          richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt);
-    }
-    else
-    {
-      // side-effect here: updates eccentric anomaly directly –– analytical soln
-      // to Kepler's equation, computed using a numerical root-finding algo
-      elements_from_cartesian(positions,
-                              velocities,
-                              vec_inclination,
-                              vec_longitude_of_ascending_node,
-                              vec_argument_of_perihelion,
-                              vec_mean_anomaly,
-                              vec_eccentricity,
-                              vec_semi_major_axis);
-      // advance mean anomaly, this is essentially advancing to the next
-      // timestep
-      vec_mean_anomaly[idx] = fmod(fma(n, dt, vec_mean_anomaly[idx]), TWOPI);
-      cartesian_from_elements(vec_inclination,
-                              vec_longitude_of_ascending_node,
-                              vec_argument_of_perihelion,
-                              vec_mean_anomaly,
-                              vec_eccentricity,
-                              vec_semi_major_axis,
-                              positions,
-                              velocities);
-    }
+    PosVel numerical_soln_to_close_encounter = PosVel{.pos = make_double3(0.0, 0.0, 0.0), .vel = make_double3(0.0, 0.0, 0.0)};
+    PosVel analyical_soln_to_kepler = PosVel{.pos = make_double3(0.0, 0.0, 0.0), .vel = make_double3(0.0, 0.0, 0.0)};
+    bool is_close_encounter = close_encounter_p(positions, velocities, masses, dt);
+    __syncthreads();
+
+    // directly updates positions and velocities by dt
+    numerical_soln_to_close_encounter =
+        modified_midpoint((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt, 5);
+    // richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, dt);
+
+    __syncthreads();
+
+    elements_from_cartesian(positions,
+                            velocities,
+                            &inclination,
+                            &longitude_of_ascending_node,
+                            &argument_of_perihelion,
+                            &mean_anomaly,
+                            &eccentricity,
+                            &semi_major_axis);
+    // advance mean anomaly, this is essentially advancing to the next
+    // timestep
+    __syncthreads();
+    mean_anomaly = (double)(!is_close_encounter) * fmod(fma(n, dt, mean_anomaly), TWOPI) + (double)(is_close_encounter)*mean_anomaly;
+    __syncthreads();
+    analyical_soln_to_kepler = cartesian_from_elements(inclination,
+                                                       longitude_of_ascending_node,
+                                                       argument_of_perihelion,
+                                                       mean_anomaly,
+                                                       eccentricity,
+                                                       semi_major_axis);
 
     // separating out calculation with update ensures that no race conditions
     // occur
     __syncthreads();
     double not_close_encounter = (1.00 - (double)is_close_encounter);
     positions[idx].x =
-        not_close_encounter * positions[idx].x +
+        not_close_encounter * analyical_soln_to_kepler.pos.x +
         (double)is_close_encounter * numerical_soln_to_close_encounter.pos.x;
     positions[idx].y =
-        not_close_encounter * positions[idx].y +
+        not_close_encounter * analyical_soln_to_kepler.pos.y +
         (double)is_close_encounter * numerical_soln_to_close_encounter.pos.y;
     positions[idx].z =
-        not_close_encounter * positions[idx].z +
+        not_close_encounter * analyical_soln_to_kepler.pos.z +
         (double)is_close_encounter * numerical_soln_to_close_encounter.pos.z;
     velocities[idx].x =
-        not_close_encounter * velocities[idx].x +
+        not_close_encounter * analyical_soln_to_kepler.vel.x +
         (double)is_close_encounter * numerical_soln_to_close_encounter.vel.x;
     velocities[idx].y =
-        not_close_encounter * velocities[idx].y +
+        not_close_encounter * analyical_soln_to_kepler.vel.y +
         (double)is_close_encounter * numerical_soln_to_close_encounter.vel.y;
     velocities[idx].z =
-        not_close_encounter * velocities[idx].z +
+        not_close_encounter * analyical_soln_to_kepler.vel.z +
         (double)is_close_encounter * numerical_soln_to_close_encounter.vel.z;
     __syncthreads();
 
@@ -737,20 +720,20 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   // convert back to elements
   elements_from_cartesian(positions,
                           velocities,
-                          vec_inclination,
-                          vec_longitude_of_ascending_node,
-                          vec_argument_of_perihelion,
-                          vec_mean_anomaly,
-                          vec_eccentricity,
-                          vec_semi_major_axis);
+                          &inclination,
+                          &longitude_of_ascending_node,
+                          &argument_of_perihelion,
+                          &mean_anomaly,
+                          &eccentricity,
+                          &semi_major_axis);
 
   // copy elements to hbm, this is so that the next batch iteration uses these values to pick up where we left off
-  vec_semi_major_axis_hbm[idx] = vec_semi_major_axis[idx];
-  vec_eccentricity_hbm[idx] = vec_eccentricity[idx];
-  vec_mean_anomaly_hbm[idx] = vec_mean_anomaly[idx];
-  vec_argument_of_perihelion_hbm[idx] = vec_argument_of_perihelion[idx];
-  vec_inclination_hbm[idx] = vec_inclination[idx];
-  vec_longitude_of_ascending_node_hbm[idx] = vec_longitude_of_ascending_node[idx];
+  vec_semi_major_axis_hbm[idx] = semi_major_axis;
+  vec_eccentricity_hbm[idx] = eccentricity;
+  vec_mean_anomaly_hbm[idx] = mean_anomaly;
+  vec_argument_of_perihelion_hbm[idx] = argument_of_perihelion;
+  vec_inclination_hbm[idx] = inclination;
+  vec_longitude_of_ascending_node_hbm[idx] = longitude_of_ascending_node;
 }
 
 #endif
