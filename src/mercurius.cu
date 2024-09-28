@@ -125,12 +125,12 @@ __host__ int main(int argc, char **argv)
 
     cudaDeviceSynchronize();
     if (print_sim_info) std::cout << "Batch " << (batch + 1) << " Simulation Complete.\n";
-    if (batch % 1e4 == 0) cudaMemcpy(output_positions,
-                                     output_positions_device,
-                                     sim.num_bodies * sizeof(double3),
-                                     cudaMemcpyDeviceToHost);
+    cudaMemcpy(output_positions,
+               output_positions_device,
+               sim.num_bodies * sizeof(double3),
+               cudaMemcpyDeviceToHost);
 
-    if (print_positions && batch % 1e4 == 0) pretty_print_positions(&sim, output_positions, batch);
+    pretty_print_positions(&sim, output_positions, batch);
     // if(output_file != "") write_output(output_positions, batch, output_file);
   }
 

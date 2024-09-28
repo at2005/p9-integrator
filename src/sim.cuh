@@ -722,7 +722,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // particular body
   }
 
-  if (batch_idx % 1e4 == 0) output_positions[idx] = positions[idx];
+  output_positions[idx] = positions[idx];
 
   __syncthreads();
   // convert back to heliocentric coordinates

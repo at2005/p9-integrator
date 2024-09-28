@@ -143,9 +143,9 @@ __host__ void pretty_print_positions(Sim *sim, double3 *output_positions, int ba
   for (int j = 0; j < sim->num_bodies; j++)
   {
     std::cout << sim->body_names[j] << ": "
-              << output_positions[i * sim->num_bodies + j].x << " "
-              << output_positions[i * sim->num_bodies + j].y << " "
-              << output_positions[i * sim->num_bodies + j].z << std::endl;
+              << output_positions[j].x << " "
+              << output_positions[j].y << " "
+              << output_positions[j].z << std::endl;
   }
   std::cout << std::endl;
 }
