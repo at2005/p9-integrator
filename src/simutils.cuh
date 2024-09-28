@@ -138,19 +138,15 @@ __host__ void args_parse(int argc,
 __host__ void pretty_print_positions(Sim *sim, double3 *output_positions, int batch_index)
 {
   int offset = BATCH_SIZE * batch_index;
-  for (int i = 0; i < BATCH_SIZE; i++)
-  {
-    std::cout << "# Timestep " << offset + (i + 1) << std::endl;
-    for (int j = 0; j < sim->num_bodies; j++)
-    {
-      std::cout << sim->body_names[j] << ": "
-                << output_positions[i * sim->num_bodies + j].x << " "
-                << output_positions[i * sim->num_bodies + j].y << " "
-                << output_positions[i * sim->num_bodies + j].z << std::endl;
-    }
-    std::cout << std::endl;
-  }
 
+  std::cout << "# Timestep " << offset + 1 << std::endl;
+  for (int j = 0; j < sim->num_bodies; j++)
+  {
+    std::cout << sim->body_names[j] << ": "
+              << output_positions[i * sim->num_bodies + j].x << " "
+              << output_positions[i * sim->num_bodies + j].y << " "
+              << output_positions[i * sim->num_bodies + j].z << std::endl;
+  }
   std::cout << std::endl;
 }
 

@@ -590,6 +590,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double *vec_masses_hbm,
                                  double3 *output_positions,
                                  int num_massive_bodies,
+                                 int batch_idx,
                                  double dt)
 
 {
@@ -601,7 +602,6 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   double3 *positions = (double3 *)total_memory;
   double3 *velocities = (double3 *)(positions + blockDim.x);
   double *masses = (double *)(velocities + blockDim.x);
-  //(uint64_t *)(masses + blockDim.x);
   __syncthreads();
 
   masses[idx] = vec_masses_hbm[idx];
@@ -720,8 +720,9 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // where each subarray is a timestep
     // so we need to index into the timestep and then add idx to index a
     // particular body
-    output_positions[i * blockDim.x + idx] = positions[idx];
   }
+
+  if (batch_idx % 1e4 == 0) output_positions[idx] = positions[idx];
 
   __syncthreads();
   // convert back to heliocentric coordinates

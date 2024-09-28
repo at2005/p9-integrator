@@ -32,7 +32,7 @@ __host__ int main(int argc, char **argv)
       *vec_eccentricity_device, *vec_semi_major_axis_device, *masses_device;
   double3 *output_positions_device;
   double3 *output_positions =
-      (double3 *)malloc(sim.num_bodies * sizeof(double3) * BATCH_SIZE);
+      (double3 *)malloc(sim.num_bodies * sizeof(double3));
 
   cudaMalloc((void **)&vec_longitude_of_ascending_node_device,
              sim.num_bodies * sizeof(double));
@@ -47,7 +47,7 @@ __host__ int main(int argc, char **argv)
              sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&masses_device, sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&output_positions_device,
-             sim.num_bodies * sizeof(double3) * BATCH_SIZE);
+             sim.num_bodies * sizeof(double3));
 
   cudaMemcpy(vec_longitude_of_ascending_node_device,
              sim.vec_longitude_of_ascending_node,
@@ -120,16 +120,17 @@ __host__ int main(int argc, char **argv)
         masses_device,
         output_positions_device,
         num_massive_bodies,
+        batch,
         dt);
 
-    if (print_sim_info) std::cout << "Batch " << (batch + 1) << " Simulation Complete. Synchronizing...\n";
     cudaDeviceSynchronize();
-    cudaMemcpy(output_positions,
-               output_positions_device,
-               sim.num_bodies * sizeof(double3) * BATCH_SIZE,
-               cudaMemcpyDeviceToHost);
+    if (print_sim_info) std::cout << "Batch " << (batch + 1) << " Simulation Complete.\n";
+    if (batch % 1e4 == 0) cudaMemcpy(output_positions,
+                                     output_positions_device,
+                                     sim.num_bodies * sizeof(double3),
+                                     cudaMemcpyDeviceToHost);
 
-    if (print_positions) pretty_print_positions(&sim, output_positions, batch);
+    if (print_positions && batch % 1e4 == 0) pretty_print_positions(&sim, output_positions, batch);
     // if(output_file != "") write_output(output_positions, batch, output_file);
   }
 

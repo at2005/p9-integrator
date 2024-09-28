@@ -127,6 +127,8 @@ def p9_setup_config():
         "argument_of_perihelion": np.random.uniform(0, 2*np.pi),
         "mean_anomaly": np.random.uniform(0, 2*np.pi)
         })
+    
+    config_dict["bodies"].sort(key=lambda x: x["mass"], reverse=True)
 
     with open("../examples/p9.json", "w") as f:
         json.dump(config_dict, f, indent=4) 
