@@ -10,9 +10,9 @@ functions for my implementation of the Mercury N-body Integrator.
 
 __device__ double3 cross(const double3 &a, const double3 &b)
 {
-  return make_double3(a.y * b.z - a.z * b.y,
-                      a.z * b.x - a.x * b.z,
-                      a.x * b.y - a.y * b.x);
+  return make_double3(fma(a.y, b.z, -a.z * b.y),
+                      fma(a.z, b.x, -a.x * b.z),
+                      fma(a.x, b.y, -a.y * b.x));
 }
 
 __device__ double stable_sqrt(double x)
@@ -44,13 +44,13 @@ __device__ double stable_acos(double x)
   // otherwise it computes acos(+/- 1.00)
   // x*alto evals to x when x inside bounds
   // copysign((1.00 - alto), x) evals to +/- 1.00 when x outside bounds
-  return acos(x * alto + copysign((1.00 - alto), x));
+  return acos(fma(x, alto, copysign((1.00 - alto), x)));
 }
 
 __device__ double stable_asin(double x)
 {
   double alto = (double)(fabs(x) <= 1.00);
-  return asin(x * alto + copysign((1.00 - alto), x));
+  return asin(fma(x, alto, copysign((1.00 - alto), x)));
 }
 
 // solves kepler's equation for the eccentric anomaly E
@@ -153,30 +153,30 @@ __device__ PosVel cartesian_from_elements(double inclination,
   double z2 = cos_a * sin_o;
   double z3 = sin_a * cos_o;
   double z4 = sin_a * sin_o;
-  double d11 = z1 - z4 * cos_i;
-  double d12 = z2 + z3 * cos_i;
+  double d11 = fma(-z4, cos_i, z1);
+  double d12 = fma(z3, cos_i, z2);
   double d13 = sin_a * sin_i;
-  double d21 = -z3 - z2 * cos_i;
-  double d22 = -z4 + z1 * cos_i;
+  double d21 = fma(-z2, cos_i, -z3);
+  double d22 = fma(z1, cos_i, -z4);
   double d23 = cos_a * sin_i;
 
   double romes = stable_sqrt(1 - eccentricity * eccentricity);
   double eccentric_anomaly = danby_burkardt(mean_anomaly, eccentricity);
-  double sin_e, cos_e;
-  sincos(eccentric_anomaly, &sin_e, &cos_e);
-  z1 = semi_major_axis * (cos_e - eccentricity);
-  z2 = semi_major_axis * romes * sin_e;
+  double sin_E, cos_E;
+  sincos(eccentric_anomaly, &sin_E, &cos_E);
+  z1 = semi_major_axis * (cos_E - eccentricity);
+  z2 = semi_major_axis * romes * sin_E;
   eccentric_anomaly =
-      stable_sqrt(1.00 / semi_major_axis) / (1.0 - eccentricity * cos_e);
-  z3 = -sin_e * eccentric_anomaly;
-  z4 = romes * cos_e * eccentric_anomaly;
+      stable_sqrt(1.00 / semi_major_axis) / (1.0 - eccentricity * cos_E);
+  z3 = -sin_E * eccentric_anomaly;
+  z4 = romes * cos_E * eccentric_anomaly;
   PosVel res;
-  res.pos = make_double3(d11 * z1 + d21 * z2,
-                         d12 * z1 + d22 * z2,
-                         d13 * z1 + d23 * z2);
-  res.vel = make_double3(d11 * z3 + d21 * z4,
-                         d12 * z3 + d22 * z4,
-                         d13 * z3 + d23 * z4);
+  res.pos = make_double3(fma(d11, z1, d21 * z2),
+                         fma(d12, z1, d22 * z2),
+                         fma(d13, z1, d23 * z2));
+  res.vel = make_double3(fma(d11, z3, d21 * z4),
+                         fma(d12, z3, d22 * z4),
+                         fma(d13, z3, d23 * z4));
 
   return res;
 }
@@ -202,7 +202,7 @@ __device__ void elements_from_cartesian(double3 *current_positions,
   double v_sq = magnitude_squared(current_v);
   double r = norm3d(current_p.x, current_p.y, current_p.z);
   double s = h_sq;
-  double eccentricity = stable_sqrt(1 + s * (v_sq - (2.00 / r)));
+  double eccentricity = stable_sqrt(fma(1.00, s, v_sq - (2.00 / r)));
   double perihelion_distance = s / (1.00 + eccentricity);
 
   // true longitude
@@ -214,8 +214,8 @@ __device__ void elements_from_cartesian(double3 *current_positions,
     double temp = (1.00 - cos_i) * to;
     double temp2 = to * to;
     true_longitude =
-        atan2((current_p.y * (1.00 + temp2 * cos_i) - current_p.x * temp),
-              (current_p.x * (temp2 + cos_i) - current_p.y * temp));
+        atan2((fma(current_p.y, (1.00 + temp2 * cos_i), -current_p.x * temp)),
+              fma(current_p.x, (temp2 + cos_i), -current_p.y * temp));
   }
   else
   {
@@ -232,9 +232,9 @@ __device__ void elements_from_cartesian(double3 *current_positions,
   }
   else
   {
-    double cos_E_anomaly = (v_sq * r - 1) / eccentricity;
+    double cos_E_anomaly = fma(v_sq, r, -1) / eccentricity;
     double E_anomaly = stable_acos(cos_E_anomaly);
-    M_anomaly = E_anomaly - eccentricity * sin(E_anomaly);
+    M_anomaly = fma(-eccentricity, sin(E_anomaly), E_anomaly);
     double cos_f = (s - r) / (eccentricity * r);
     double f = stable_acos(cos_f);
     p = true_longitude - f;
@@ -289,11 +289,8 @@ __device__ double3 body_interaction_kick(
     double r_crit = changeover_vals.r_crit;
     if (possible_close_encounter)
     {
-      if (r < r_crit)
-      {
-        // 1 - K weighting if close encounter
-        changeover_weight = 1 - changeover_weight;
-      }
+      // 1 - K weighting if close encounter
+      changeover_weight = (r <= r_crit) * (1 - changeover_weight) + (r > r_crit) * changeover_weight;
     }
 
     // add smoothing constant
@@ -543,7 +540,7 @@ __device__ void democratic_heliocentric_conversion(
   __syncthreads();
 
   // if we are performing the reverse conversion, we just need to divide by the main mass = 1
-  double scaling_factor = 1.00 / ((not_reverse_d * total_mass) + 1.00);
+  double scaling_factor = 1.00 / fma(not_reverse_d, total_mass, 1.00);
 
   mass_weighted_v.x *= scaling_factor;
   mass_weighted_v.y *= scaling_factor;
@@ -564,6 +561,7 @@ __device__ bool close_encounter_p(
 {
   // get indices of bodies i am undergoing close encounters with
   int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  bool has_close_encounter = false;
   for (int i = 0; i < num_massive_bodies; i++)
   {
     if (i == idx) continue;
@@ -573,12 +571,10 @@ __device__ bool close_encounter_p(
     r_ij.z = positions[i].z - positions[idx].z;
     double r_ij_mag = norm3d(r_ij.x, r_ij.y, r_ij.z);
     double r_crit = fetch_r_crit((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, i, dt);
-    if (r_ij_mag < r_crit)
-    {
-      return true;
-    }
+    has_close_encounter = has_close_encounter || (r_ij_mag < r_crit);
   }
-  return false;
+
+  return has_close_encounter;
 }
 
 __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
@@ -684,23 +680,17 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     __syncthreads();
     double not_close_encounter = (1.00 - (double)is_close_encounter);
     positions[idx].x =
-        not_close_encounter * analyical_soln_to_kepler.pos.x +
-        (double)is_close_encounter * numerical_soln_to_close_encounter.pos.x;
+        fma(not_close_encounter, analyical_soln_to_kepler.pos.x, (double)is_close_encounter * numerical_soln_to_close_encounter.pos.x);
     positions[idx].y =
-        not_close_encounter * analyical_soln_to_kepler.pos.y +
-        (double)is_close_encounter * numerical_soln_to_close_encounter.pos.y;
+        fma(not_close_encounter, analyical_soln_to_kepler.pos.y, (double)is_close_encounter * numerical_soln_to_close_encounter.pos.y);
     positions[idx].z =
-        not_close_encounter * analyical_soln_to_kepler.pos.z +
-        (double)is_close_encounter * numerical_soln_to_close_encounter.pos.z;
+        fma(not_close_encounter, analyical_soln_to_kepler.pos.z, (double)is_close_encounter * numerical_soln_to_close_encounter.pos.z);
     velocities[idx].x =
-        not_close_encounter * analyical_soln_to_kepler.vel.x +
-        (double)is_close_encounter * numerical_soln_to_close_encounter.vel.x;
+        fma(not_close_encounter, analyical_soln_to_kepler.vel.x, (double)is_close_encounter * numerical_soln_to_close_encounter.vel.x);
     velocities[idx].y =
-        not_close_encounter * analyical_soln_to_kepler.vel.y +
-        (double)is_close_encounter * numerical_soln_to_close_encounter.vel.y;
+        fma(not_close_encounter, analyical_soln_to_kepler.vel.y, (double)is_close_encounter * numerical_soln_to_close_encounter.vel.y);
     velocities[idx].z =
-        not_close_encounter * analyical_soln_to_kepler.vel.z +
-        (double)is_close_encounter * numerical_soln_to_close_encounter.vel.z;
+        fma(not_close_encounter, analyical_soln_to_kepler.vel.z, (double)is_close_encounter * numerical_soln_to_close_encounter.vel.z);
     __syncthreads();
 
     // final "kicks"
