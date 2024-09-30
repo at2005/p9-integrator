@@ -202,7 +202,7 @@ __device__ void elements_from_cartesian(double3 *current_positions,
   double v_sq = magnitude_squared(current_v);
   double r = norm3d(current_p.x, current_p.y, current_p.z);
   double s = h_sq;
-  double eccentricity = stable_sqrt(fma(1.00, s, v_sq - (2.00 / r)));
+  double eccentricity = stable_sqrt(fma(s, v_sq - (2.00 / r), 1.00));
   double perihelion_distance = s / (1.00 + eccentricity);
 
   // true longitude
@@ -232,7 +232,7 @@ __device__ void elements_from_cartesian(double3 *current_positions,
   }
   else
   {
-    double cos_E_anomaly = fma(v_sq, r, -1) / eccentricity;
+    double cos_E_anomaly = fma(v_sq, r, -1.00) / eccentricity;
     double E_anomaly = stable_acos(cos_E_anomaly);
     M_anomaly = fma(-eccentricity, sin(E_anomaly), E_anomaly);
     double cos_f = (s - r) / (eccentricity * r);
@@ -584,7 +584,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double *vec_inclination_hbm,
                                  double *vec_longitude_of_ascending_node_hbm,
                                  double *vec_masses_hbm,
-                                 double3 *output_positions,
+                                 double3 *output_positions_hbm,
                                  int num_massive_bodies,
                                  int batch_idx,
                                  double dt)
@@ -712,7 +712,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // particular body
   }
 
-  output_positions[idx] = positions[idx];
+  output_positions_hbm[idx] = positions[idx];
 
   __syncthreads();
   // convert back to heliocentric coordinates
