@@ -133,7 +133,7 @@ __device__ KR_Crit changeover(
   double r_crit = fetch_r_crit(current_coords, positions, velocities, masses, idx_other, dt);
   KR_Crit res;
   res.r_crit = r_crit;
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  int idx = threadIdx.x;
   double r_ij = (double)(idx != idx_other) * dist(positions[idx_other], current_coords.pos);
   double y = (r_ij - 0.1 * r_crit) / (0.9 * r_crit);
   double K = y * y / (2 * y * y - 2 * y + 1);
@@ -199,7 +199,7 @@ __device__ void elements_from_cartesian(double3 *current_positions,
                                         double *current_eccentricity,
                                         double *current_semi_major_axis)
 {
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  int idx = threadIdx.x;
   double3 current_p = current_positions[idx];
   double3 current_v = current_velocities[idx];
   double3 angular_momentum = cross(current_p, current_v);
@@ -269,7 +269,7 @@ __device__ double3 body_interaction_kick(
     double dt,
     bool possible_close_encounter = false)
 {
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  int idx = threadIdx.x;
   const double3 my_position = current_coords.pos;
   double3 acc = make_double3(0.0, 0.0, 0.0);
   double3 dist;
@@ -324,7 +324,7 @@ __device__ double3 main_body_kinetic(const double3 *positions,
                                      int num_massive_bodies,
                                      double dt)
 {
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  int idx = threadIdx.x;
   double3 my_position = positions[idx];
   double3 p = make_double3(0.0, 0.0, 0.0);
   // calculate total momentum of all bodies
@@ -516,7 +516,7 @@ __device__ void democratic_heliocentric_conversion(
     int num_massive_bodies,
     bool reverse = false)
 {
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  int idx = threadIdx.x;
   double total_mass = 0.0;
   double not_reverse_d = (double)(!reverse);
   double add_or_sub = pow(-1, not_reverse_d);
@@ -524,11 +524,10 @@ __device__ void democratic_heliocentric_conversion(
   double3 mass_weighted_v = make_double3(0.0, 0.0, 0.0);
   for (int i = 0; i < num_massive_bodies; i++)
   {
-    int true_idx = i;
-    total_mass += masses[true_idx];
-    mass_weighted_v.x = fma(masses[true_idx], velocities[true_idx].x, mass_weighted_v.x);
-    mass_weighted_v.y = fma(masses[true_idx], velocities[true_idx].y, mass_weighted_v.y);
-    mass_weighted_v.z = fma(masses[true_idx], velocities[true_idx].z, mass_weighted_v.z);
+    total_mass += masses[i];
+    mass_weighted_v.x = fma(masses[i], velocities[i].x, mass_weighted_v.x);
+    mass_weighted_v.y = fma(masses[i], velocities[i].y, mass_weighted_v.y);
+    mass_weighted_v.z = fma(masses[i], velocities[i].z, mass_weighted_v.z);
   }
 
   // prevent race condition, ensure all threads have finished reading old
@@ -556,7 +555,7 @@ __device__ bool close_encounter_p(
     double dt)
 {
   // get indices of bodies i am undergoing close encounters with
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  int idx = threadIdx.x;
   bool has_close_encounter = false;
   for (int i = 0; i < num_massive_bodies; i++)
   {
@@ -586,7 +585,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double dt)
 
 {
-  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  int idx = threadIdx.x;
 
   // declare SRAM buffer
   extern __shared__ char total_memory[];
