@@ -108,8 +108,10 @@ __host__ int main(int argc, char **argv)
 
   for (int batch = 0; batch < NUM_ITERS; batch++)
   {
-    int max_sram = 98304;  // 228 * 1024;
+    int max_sram = 228 * 1024;
     cudaFuncSetAttribute(mercurius_solver, cudaFuncAttributeMaxDynamicSharedMemorySize, max_sram);
+    cudaFuncSetCacheConfig(mercurius_solver, cudaFuncCachePreferShared);
+
     mercurius_solver<<<1, sim.num_bodies, sram_size>>>(
         vec_argument_of_perihelion_device,
         vec_mean_anomaly_device,

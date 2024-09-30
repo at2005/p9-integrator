@@ -53,6 +53,15 @@ __device__ double stable_asin(double x)
   return asin(fma(x, alto, copysign((1.00 - alto), x)));
 }
 
+// returns zero if y is zero
+__device__ double stable_division(double x, double y)
+{
+  double etz = (double)(y == 0.00);
+  double netz = (double)(y != 0.00);
+  double res = (netz * x) / (y + etz);
+  return res;
+}
+
 // solves kepler's equation for the eccentric anomaly E
 __device__ double danby_burkardt(double mean_anomaly, double eccentricity)
 {
@@ -124,8 +133,8 @@ __device__ KR_Crit changeover(
   double r_crit = fetch_r_crit(current_coords, positions, velocities, masses, idx_other, dt);
   KR_Crit res;
   res.r_crit = r_crit;
-
-  double r_ij = dist(positions[idx_other], current_coords.pos);
+  int idx = threadIdx.x + blockIdx.x * blockDim.x;
+  double r_ij = (double)(idx != idx_other) * dist(positions[idx_other], current_coords.pos);
   double y = (r_ij - 0.1 * r_crit) / (0.9 * r_crit);
   double K = y * y / (2 * y * y - 2 * y + 1);
   // trying to avoid branching
@@ -208,38 +217,34 @@ __device__ void elements_from_cartesian(double3 *current_positions,
   // true longitude
   double cos_i = cos(inclination);
   double true_longitude;
-  if (angular_momentum.y != 0)
-  {
-    double to = -angular_momentum.x / angular_momentum.y;
-    double temp = (1.00 - cos_i) * to;
-    double temp2 = to * to;
-    true_longitude =
-        atan2((fma(current_p.y, (1.00 + temp2 * cos_i), -current_p.x * temp)),
-              fma(current_p.x, (temp2 + cos_i), -current_p.y * temp));
-  }
-  else
-  {
-    true_longitude = atan2(current_p.y * cos_i, current_p.x);
-  }
+
+  // evals to zero if angular momentum y component is zero
+  double to = stable_division(-angular_momentum.x, angular_momentum.y);
+  double temp = (1.00 - cos_i) * to;
+  double etz = (double)(angular_momentum.y == 0.00);
+  double netz = (double)(angular_momentum.y != 0.00);
+  // temp2 set to one if angular momentum y component is zero
+  double temp2 = fma(netz, to * to, etz);
+  true_longitude =
+      atan2((fma(current_p.y, fma(temp2, cos_i, (netz * 1.00)), -current_p.x * temp)),
+            fma(current_p.x, fma(netz, cos_i, temp2), -current_p.y * temp));
 
   // mean anomaly and longitude of perihelion
-  double p;
-  double M_anomaly;
-  if (eccentricity < epsilon)
-  {
-    p = 0;
-    M_anomaly = true_longitude;
-  }
-  else
-  {
-    double cos_E_anomaly = fma(v_sq, r, -1.00) / eccentricity;
-    double E_anomaly = stable_acos(cos_E_anomaly);
-    M_anomaly = fma(-eccentricity, sin(E_anomaly), E_anomaly);
-    double cos_f = (s - r) / (eccentricity * r);
-    double f = stable_acos(cos_f);
-    p = true_longitude - f;
-    p = fmod(p + TWOPI + TWOPI, TWOPI);
-  }
+  etz = (double)(eccentricity == 0.00);
+  netz = (double)(eccentricity != 0.00);
+  // set to zero if e = 0
+  double cos_E_anomaly = stable_division(fma(v_sq, r, -1.00), eccentricity);
+  // set to pi/2 if e = 0
+  double E_anomaly = stable_acos(cos_E_anomaly);
+  // set to true longitude if e = 0
+  double M_anomaly = netz * fma(-eccentricity, sin(E_anomaly), E_anomaly) + etz * true_longitude;
+  // set to zero if e = 0
+  double cos_f = stable_division((s - r), (eccentricity * r));
+  // set to pi/2 if e = 0
+  double f = stable_acos(cos_f);
+  double p = true_longitude - f;
+  // p set to zero if e = 0
+  p = netz * fmod(p + TWOPI + TWOPI, TWOPI);
 
   // argument of perihelion
   double argument_of_perihelion = p - longitude_of_ascending_node;
@@ -270,7 +275,6 @@ __device__ double3 body_interaction_kick(
   double3 dist;
   for (int i = 0; i < num_massive_bodies; i++)
   {
-    if (i == idx) continue;
     // 3-vec displacement, let r = x, y, z, this is the direction of the
     // acceleration it is directed towards the other body since gravity is
     // attractive
@@ -294,14 +298,13 @@ __device__ double3 body_interaction_kick(
     }
 
     // add smoothing constant
-
-    r_sq += SMOOTHING_CONSTANT_SQUARED;
+    r_sq += (double)(idx != i) * SMOOTHING_CONSTANT_SQUARED;
     // the (r^2 + s^2) comes from inv sq law w/ smoothing, and the other r bc
     // direction is normalized
     double force_denom = r_sq * r;
 
     double weighted_acceleration =
-        changeover_weight * masses[i] / force_denom;
+        changeover_weight * stable_division(masses[i], force_denom);
     // // accumulate total acceleration due to all bodies, except self
     acc.x = fma(weighted_acceleration, dist.x, acc.x);
     acc.y = fma(weighted_acceleration, dist.y, acc.y);
@@ -497,13 +500,6 @@ __device__ PosVel richardson_extrapolation(
       buffer[i][j].vel.y /= denom;
       buffer[i][j].vel.z /= denom;
     }
-
-    if (is_converged(buffer[i][i], buffer[i - 1][i - 1]))
-    {
-      out.pos = buffer[i][i].pos;
-      out.vel = buffer[i][i].vel;
-      return out;
-    }
   }
 
   out.pos = buffer[MAX_ROWS_RICHARDSON - 1][MAX_ROWS_RICHARDSON - 1].pos;
@@ -564,14 +560,14 @@ __device__ bool close_encounter_p(
   bool has_close_encounter = false;
   for (int i = 0; i < num_massive_bodies; i++)
   {
-    if (i == idx) continue;
     double3 r_ij;
     r_ij.x = positions[i].x - positions[idx].x;
     r_ij.y = positions[i].y - positions[idx].y;
     r_ij.z = positions[i].z - positions[idx].z;
     double r_ij_mag = norm3d(r_ij.x, r_ij.y, r_ij.z);
     double r_crit = fetch_r_crit((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, i, dt);
-    has_close_encounter = has_close_encounter || (r_ij_mag < r_crit);
+    bool r_crit_reached = (r_ij_mag < r_crit) && (idx != i);
+    has_close_encounter = has_close_encounter || r_crit_reached;
   }
 
   return has_close_encounter;
