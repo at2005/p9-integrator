@@ -8,8 +8,7 @@ __host__ int main(int argc, char **argv)
   bool print_positions = false;
   std::string output_file;
   std::string config_file;
-  // default is one orbital period (of Earth)
-  int NUM_TIMESTEPS = 1;
+  int NUM_TIMESTEPS;
   args_parse(argc,
              argv,
              &print_sim_info,
