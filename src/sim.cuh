@@ -11,6 +11,20 @@ functions for my implementation of the Mercury N-body Integrator.
 */
 namespace cg = cooperative_groups;
 
+__device__ void get_mapped_pos(double3 **mapped_positions, double3 **mapped_velocities, double **mapped_masses, cg::cluster_group cluster, double *sram)
+{
+  size_t velocities_offset = sizeof(double) * blockDim.x;
+  size_t masses_offset = velocities_offset + sizeof(double3) * blockDim.x;
+  size_t masses_size = blockDim.x;
+  double3 *positions = (double3 *)&sram;
+  double3 *velocities = (double3 *)&sram[velocities_offset];
+  double *masses = &sram[masses_offset];
+
+  *mapped_positions = (double3 *)cluster.map_shared_rank(positions, (cluster.block_rank() == 0) * cluster.block_rank());
+  *mapped_velocities = (double3 *)cluster.map_shared_rank(velocities, (cluster.block_rank() == 0) * cluster.block_rank());
+  *mapped_masses = (double *)cluster.map_shared_rank(masses, (cluster.block_rank() == 0) * cluster.block_rank());
+}
+
 __device__ double3 cross(const double3 &a, const double3 &b)
 {
   return make_double3(fma(a.y, b.z, -a.z * b.y),
@@ -127,17 +141,20 @@ __device__ double fetch_r_crit(
 
 __device__ KR_Crit changeover(
     cg::cluster_group cluster,
-    char *sram,
+    double *sram,
     PosVel current_coords,
     int idx_other,
     double dt)
 {
-  int idx = cluster.thread_rank() % blockDim.x;
-  double r_crit = 0.06; //fetch_r_crit(current_coords, positions, velocities, masses, idx_other, dt);
+  int idx = threadIdx.x;
+  double r_crit = 0.06;  // fetch_r_crit(current_coords, positions, velocities, masses, idx_other, dt);
   KR_Crit res;
   res.r_crit = r_crit;
   // we can assume that massive bodies are in cluster 0
-  double3 *positions_other = (double3 *)map_shared_rank(sram, 0);
+  double3 *positions_other;
+  double3 *velocities_other;
+  double *masses_other;
+  get_mapped_pos(&positions_other, &velocities_other, &masses_other, cluster, sram);
   double r_ij = (double)(idx != idx_other) * dist(positions_other[idx_other], current_coords.pos);
   double y = (r_ij - 0.1 * r_crit) / (0.9 * r_crit);
   double K = y * y / (2 * y * y - 2 * y + 1);
@@ -194,16 +211,18 @@ __device__ PosVel cartesian_from_elements(double inclination,
   return res;
 }
 
-__device__ void elements_from_cartesian(const double3 *positions,
-                                        const double3 *velocities,
-                                        double *current_inclination,
-                                        double *current_longitude_of_ascending_node,
-                                        double *current_argument_of_perihelion,
-                                        double *current_mean_anomaly,
-                                        double *current_eccentricity,
-                                        double *current_semi_major_axis)
+__device__ void elements_from_cartesian(
+    cg::cluster_group cluster,
+    const double3 *current_positions,
+    const double3 *current_velocities,
+    double *current_inclination,
+    double *current_longitude_of_ascending_node,
+    double *current_argument_of_perihelion,
+    double *current_mean_anomaly,
+    double *current_eccentricity,
+    double *current_semi_major_axis)
 {
-  int idx = cluster.thread_rank() % blockDim.x;
+  int idx = threadIdx.x;
   double3 current_p = current_positions[idx];
   double3 current_v = current_velocities[idx];
   double3 angular_momentum = cross(current_p, current_v);
@@ -265,21 +284,27 @@ __device__ void elements_from_cartesian(const double3 *positions,
 // this function returns an updated velocity
 __device__ double3 body_interaction_kick(
     cg::cluster_group cluster,
-    char *sram,
+    double *sram,
     PosVel current_coords,
     // position and velocity arrays are read-only
     int num_massive_bodies,
     double dt,
     bool possible_close_encounter = false)
 {
-  int idx = cluster.thread_rank() % blockDim.x;
+  int idx = threadIdx.x;
   const double3 my_position = current_coords.pos;
   double3 acc = make_double3(0.0, 0.0, 0.0);
   double3 dist;
   for (int i = 0; i < num_massive_bodies; i++)
   {
+    unsigned int block_rank = cluster.block_rank();
     // assume massive bodies are in cluster 0
-    double3 *positions_other = (double3 *)map_shared_rank(sram, 0);
+    cluster.sync();
+    double3 *positions_other;
+    double3 *velocities_other;
+    double *masses_other;
+    get_mapped_pos(&positions_other, &velocities_other, &masses_other, cluster, sram);
+    cluster.sync();
     // 3-vec displacement, let r = x, y, z, this is the direction of the
     // acceleration it is directed towards the other body since gravity is
     // attractive
@@ -308,7 +333,6 @@ __device__ double3 body_interaction_kick(
     // direction is normalized
     double force_denom = r_sq * r;
 
-    double3 *masses_other = (double *)(positions_other + 2 * blockDim.x);
     double weighted_acceleration =
         changeover_weight * stable_division(masses_other[i], force_denom);
     // // accumulate total acceleration due to all bodies, except self
@@ -326,20 +350,21 @@ __device__ double3 body_interaction_kick(
 
 __device__ double3 main_body_kinetic(
     cg::cluster_group cluster,
-    char *sram,
+    double *sram,
     const double3 *positions,
     int num_massive_bodies,
     double dt)
 {
-  int idx = cluster.thread_rank() % blockDim.x;
+  int idx = threadIdx.x;
   double3 my_position = positions[idx];
   double3 p = make_double3(0.0, 0.0, 0.0);
   // calculate total momentum of all bodies
   for (int i = 0; i < num_massive_bodies; i++)
   {
-    double3 *positions_other = (double3 *)map_shared_rank(sram, 0);
-    double3 *velocities_other = (double3 *)(positions_other + blockDim.x);
-    double *masses_other = (double *)(velocities_other + blockDim.x);
+    double3 *positions_other;
+    double3 *velocities_other;
+    double *masses_other;
+    get_mapped_pos(&positions_other, &velocities_other, &masses_other, cluster, sram);
 
     p.x = fma(masses_other[i], velocities_other[i].x, p.x);
     p.y = fma(masses_other[i], velocities_other[i].y, p.y);
@@ -357,7 +382,7 @@ __device__ double3 main_body_kinetic(
 // bodies (incl sun)
 __device__ double3 update_my_velocity_total(
     cg::cluster_group cluster,
-    char *sram,
+    double *sram,
     PosVel current_coords,
     int num_massive_bodies,
     double dt)
@@ -393,7 +418,7 @@ __device__ double3 update_my_velocity_total(
 
 __device__ PosVel modified_midpoint(
     cg::cluster_group cluster,
-    char *sram,
+    double *sram,
     PosVel current_coords,
     int num_massive_bodies,
     double dt,
@@ -451,7 +476,7 @@ __device__ PosVel modified_midpoint(
 
 __device__ PosVel richardson_extrapolation(
     cg::cluster_group cluster,
-    char *sram,
+    double *sram,
     PosVel current_coords,
     int num_massive_bodies,
     double dt)
@@ -505,14 +530,14 @@ __device__ PosVel richardson_extrapolation(
 // and at the origin
 __device__ void democratic_heliocentric_conversion(
     cg::cluster_group cluster,
-    char *sram,
+    double *sram,
     double3 *positions,
     double3 *velocities,
     double *masses,
     int num_massive_bodies,
     bool reverse = false)
 {
-  int idx = cluster.thread_rank() % blockDim.x;
+  int idx = threadIdx.x;
   double total_mass = 0.0;
   double not_reverse_d = (double)(!reverse);
   double add_or_sub = pow(-1, not_reverse_d);
@@ -520,9 +545,10 @@ __device__ void democratic_heliocentric_conversion(
   double3 mass_weighted_v = make_double3(0.0, 0.0, 0.0);
   for (int i = 0; i < num_massive_bodies; i++)
   {
-    double3 *positions_other = (double3 *)map_shared_rank(sram, 0);
-    double3 *velocities_other = (double3 *)(positions_other + blockDim.x);
-    double *masses_other = (double *)(velocities_other + blockDim.x);
+    double3 *positions_other;
+    double3 *velocities_other;
+    double *masses_other;
+    get_mapped_pos(&positions_other, &velocities_other, &masses_other, cluster, sram);
 
     total_mass += masses_other[i];
     mass_weighted_v.x = fma(masses_other[i], velocities_other[i].x, mass_weighted_v.x);
@@ -549,7 +575,7 @@ __device__ void democratic_heliocentric_conversion(
 
 __device__ bool close_encounter_p(
     cg::cluster_group cluster,
-    char *sram,
+    double *sram,
     double3 *positions,
     double3 *velocities,
     double *masses,
@@ -557,17 +583,20 @@ __device__ bool close_encounter_p(
     double dt)
 {
   // get indices of bodies i am undergoing close encounters with
-  int idx = cluster.thread_rank() % blockDim.x;
+  int idx = threadIdx.x;
   bool has_close_encounter = false;
   for (int i = 0; i < num_massive_bodies; i++)
   {
-    double3 *positions_other = (double3 *)map_shared_rank(sram, 0);
+    double3 *positions_other;
+    double3 *velocities_other;
+    double *masses_other;
+    get_mapped_pos(&positions_other, &velocities_other, &masses_other, cluster, sram);
     double3 r_ij;
     r_ij.x = positions_other[i].x - positions[idx].x;
     r_ij.y = positions_other[i].y - positions[idx].y;
     r_ij.z = positions_other[i].z - positions[idx].z;
     double r_ij_mag = norm3d(r_ij.x, r_ij.y, r_ij.z);
-    double r_crit = 0.06;//fetch_r_crit((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, i, dt);
+    double r_crit = 0.06;  // fetch_r_crit((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, i, dt);
     bool r_crit_reached = (r_ij_mag < r_crit) && (idx != i);
     has_close_encounter = has_close_encounter || r_crit_reached;
   }
@@ -589,20 +618,26 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
 
 {
   // declare SRAM buffer
-  extern __shared__ char sram[];
+  extern __shared__ double sram[];
   // namespace cg = cooperative_groups;
   cg::cluster_group cluster = cg::this_cluster();
   unsigned int clusterBlockRank = cluster.block_rank();
   int num_threads = cluster.num_threads();
-  int block_rank = cluster.block_rank();
   int global_idx = cluster.thread_rank();
-  int idx = global_idx % blockDim.x;
+  int idx = threadIdx.x;
 
   cluster.sync();
-  // get local offset in global memory
-  double3 *positions = (double3 *)cluster.map_shared_rank(sram, block_rank);
-  double3 *velocities = (double3 *)(positions + blockDim.x);
-  double *masses = (double *)(velocities + blockDim.x);
+
+  size_t velocities_offset = sizeof(double) * blockDim.x;
+  size_t masses_offset = velocities_offset + sizeof(double3) * blockDim.x;
+  size_t masses_size = blockDim.x;
+  double3 *positions = (double3 *)&sram;
+  double3 *velocities = (double3 *)&sram[velocities_offset];
+  double *masses = &sram[masses_offset];
+  positions = (double3 *)cluster.map_shared_rank(positions, clusterBlockRank);
+  velocities = (double3 *)cluster.map_shared_rank(velocities, clusterBlockRank);
+  masses = (double *)cluster.map_shared_rank(masses, clusterBlockRank);
+
   cluster.sync();
 
   masses[idx] = vec_masses_hbm[global_idx];
@@ -660,7 +695,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
 
     cluster.sync();
 
-    elements_from_cartesian(cluster, sram, positions, velocities, &inclination, &longitude_of_ascending_node, &argument_of_perihelion, &mean_anomaly, &eccentricity, &semi_major_axis);
+    elements_from_cartesian(cluster, positions, velocities, &inclination, &longitude_of_ascending_node, &argument_of_perihelion, &mean_anomaly, &eccentricity, &semi_major_axis);
     // advance mean anomaly, this is essentially advancing to the next
     // timestep
     cluster.sync();
@@ -714,11 +749,12 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
 
   cluster.sync();
   // convert back to heliocentric coordinates
-  democratic_heliocentric_conversion(cluster_group, sram, positions, velocities, masses, num_massive_bodies, true);
+  democratic_heliocentric_conversion(cluster, sram, positions, velocities, masses, num_massive_bodies, true);
   // convert back to elements
   elements_from_cartesian(
+      cluster,
       positions,
-      velocities, 
+      velocities,
       &inclination,
       &longitude_of_ascending_node,
       &argument_of_perihelion,

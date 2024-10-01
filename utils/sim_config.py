@@ -69,7 +69,7 @@ def p9_setup_config():
     Generates a JSON config file for TNOs as described in
     https://arxiv.org/pdf/2108.09868
     """
-    num_tnos = 635
+    num_tnos = 835
     a_upper = 500
     a_lower = 150
     a_spacing = (a_upper - a_lower) / num_tnos

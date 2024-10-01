@@ -24,12 +24,12 @@ __host__ int main(int argc, char **argv)
   double dt = 0.8219;
   // double dt = 0.1;
   cudaLaunchConfig_t config = {0};
-  config.blockDim = dim3(sim->num_bodies, 1, 1);
-  config.gridDim = dim3(8, 1, 1);
-  int cluster_size = 1;
-  config.dynamicSmemBytes = (sizeof(double3) * 2 + sizeof(double));
+  int cluster_size = 2;
+  config.blockDim = dim3(sim.num_bodies / cluster_size, 1, 1);
+  config.gridDim = dim3(cluster_size, 1, 1);
+  config.dynamicSmemBytes = sim.num_bodies * (sizeof(double3) * 2 + sizeof(double));
   if (print_sim_info) std::cout << "Allocating " << config.dynamicSmemBytes << " bytes of SRAM per block" << std::endl;
-  CUDA_CHECK(::cudaFuncSetAttribute((void *)mercurius_solver, cudaFuncAttributeMaxDynamicSharedMemorySize, config.dynamicSmemBytes));
+  cudaFuncSetAttribute((void *)mercurius_solver, cudaFuncAttributeMaxDynamicSharedMemorySize, 48 * 1024);
   cudaLaunchAttribute attribute[1];
   attribute[0].id = cudaLaunchAttributeClusterDimension;
   attribute[0].val.clusterDim.x = cluster_size;
@@ -45,50 +45,51 @@ __host__ int main(int argc, char **argv)
       *vec_eccentricity_device, *vec_semi_major_axis_device, *masses_device;
   double3 *output_positions_device;
   double3 *output_positions =
-      (double3 *)malloc(sim.num_bodies * cluster_size * sizeof(double3));
+      (double3 *)malloc(sim.num_bodies * sizeof(double3));
 
   cudaMalloc((void **)&vec_longitude_of_ascending_node_device,
-             sim.num_bodies * cluster_size * sizeof(double));
-  cudaMalloc((void **)&vec_inclination_device, sim.num_bodies * sizeof(double));
+             sim.num_bodies * sizeof(double));
+  cudaMalloc((void **)&vec_inclination_device,
+             sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&vec_argument_of_perihelion_device,
-             sim.num_bodies * cluster_size * sizeof(double));
+             sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&vec_mean_anomaly_device,
-             sim.num_bodies * cluster_size * sizeof(double));
+             sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&vec_eccentricity_device,
-             sim.num_bodies * cluster_size * sizeof(double));
+             sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&vec_semi_major_axis_device,
-             sim.num_bodies * cluster_size * sizeof(double));
+             sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&masses_device, sim.num_bodies * sizeof(double));
   cudaMalloc((void **)&output_positions_device,
-             sim.num_bodies * cluster_size * sizeof(double3));
+             sim.num_bodies * sizeof(double3));
 
   cudaMemcpy(vec_longitude_of_ascending_node_device,
              sim.vec_longitude_of_ascending_node,
-             sim.num_bodies * cluster_size * sizeof(double),
+             sim.num_bodies * sizeof(double),
              cudaMemcpyHostToDevice);
   cudaMemcpy(vec_inclination_device,
              sim.vec_inclination,
-             sim.num_bodies * cluster_size * sizeof(double),
+             sim.num_bodies * sizeof(double),
              cudaMemcpyHostToDevice);
   cudaMemcpy(vec_argument_of_perihelion_device,
              sim.vec_argument_of_perihelion,
-             sim.num_bodies * cluster_size * sizeof(double),
+             sim.num_bodies * sizeof(double),
              cudaMemcpyHostToDevice);
   cudaMemcpy(vec_mean_anomaly_device,
              sim.vec_mean_anomaly,
-             sim.num_bodies * cluster_size * sizeof(double),
+             sim.num_bodies * sizeof(double),
              cudaMemcpyHostToDevice);
   cudaMemcpy(vec_eccentricity_device,
              sim.vec_eccentricity,
-             sim.num_bodies * cluster_size * sizeof(double),
+             sim.num_bodies * sizeof(double),
              cudaMemcpyHostToDevice);
   cudaMemcpy(vec_semi_major_axis_device,
              sim.vec_semi_major_axis,
-             sim.num_bodies * cluster_size * sizeof(double),
+             sim.num_bodies * sizeof(double),
              cudaMemcpyHostToDevice);
   cudaMemcpy(masses_device,
              sim.masses,
-             sim.num_bodies * cluster_size * sizeof(double),
+             sim.num_bodies * sizeof(double),
              cudaMemcpyHostToDevice);
 
   // print sim information
@@ -133,7 +134,7 @@ __host__ int main(int argc, char **argv)
     if (print_sim_info) std::cout << "Batch " << (batch + 1) << " Simulation Complete.\n";
     cudaMemcpy(output_positions,
                output_positions_device,
-               sim.num_bodies * sizeof(double3) * cluster_size,
+               sim.num_bodies * sizeof(double3),
                cudaMemcpyDeviceToHost);
 
     pretty_print_positions(&sim, output_positions, batch);
