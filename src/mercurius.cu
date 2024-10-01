@@ -25,11 +25,17 @@ __host__ int main(int argc, char **argv)
   // double dt = 0.1;
   cudaLaunchConfig_t config = {0};
   int cluster_size = 2;
+  assert(sim.num_bodies % cluster_size == 0);
   config.blockDim = dim3(sim.num_bodies / cluster_size, 1, 1);
   config.gridDim = dim3(cluster_size, 1, 1);
-  config.dynamicSmemBytes = sim.num_bodies * (sizeof(double3) * 2 + sizeof(double));
+  config.dynamicSmemBytes = config.blockDim.x * (sizeof(double3) * 2 + sizeof(double));
   if (print_sim_info) std::cout << "Allocating " << config.dynamicSmemBytes << " bytes of SRAM per block" << std::endl;
-  cudaFuncSetAttribute((void *)mercurius_solver, cudaFuncAttributeMaxDynamicSharedMemorySize, 48 * 1024);
+  cudaError_t error = cudaFuncSetAttribute((void *)mercurius_solver, cudaFuncAttributeMaxDynamicSharedMemorySize, config.dynamicSmemBytes);
+  if (error != cudaSuccess)
+  {
+    std::cout << "Error setting max shared memory size: " << cudaGetErrorString(error) << std::endl;
+    exit(1);
+  }
   cudaLaunchAttribute attribute[1];
   attribute[0].id = cudaLaunchAttributeClusterDimension;
   attribute[0].val.clusterDim.x = cluster_size;
