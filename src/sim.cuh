@@ -718,7 +718,6 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     cluster.sync();
 
     // final "kicks"
-    // cluster.sync();
     position_after_main_body_kick =
         main_body_kinetic(cluster, sram, positions, num_massive_bodies, half_dt);
     cluster.sync();

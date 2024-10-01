@@ -6,7 +6,7 @@ Note: Units are such that G=1, ie mass is in solar masses, distance is in AU, ti
 
 ## Compiling
 
-To compile, run `make` in the root directory. This will create a binary in the `bin` directory. Currently only tested on H100s, but should work on other GPUs – modify the Makefile to specify an arch flag. Ensure that the latest version of CUDA is installed.
+To compile, run `make` in the root directory. This will create a binary in the `bin` directory. Only supported on Hopper GPUs due to requiring distributed shared memory.
 
 ## Running
 

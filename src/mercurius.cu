@@ -24,7 +24,7 @@ __host__ int main(int argc, char **argv)
   double dt = 0.8219;
   // double dt = 0.1;
   cudaLaunchConfig_t config = {0};
-  int cluster_size = 2;
+  int cluster_size = 8;
   assert(sim.num_bodies % cluster_size == 0);
   config.blockDim = dim3(sim.num_bodies / cluster_size, 1, 1);
   config.gridDim = dim3(cluster_size, 1, 1);
