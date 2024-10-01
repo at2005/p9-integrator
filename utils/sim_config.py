@@ -69,7 +69,7 @@ def p9_setup_config():
     Generates a JSON config file for TNOs as described in
     https://arxiv.org/pdf/2108.09868
     """
-    num_tnos = 640 * 8 - 5
+    num_tnos = 640 * 16 - 5
     a_upper = 500
     a_lower = 150
     a_spacing = (a_upper - a_lower) / num_tnos
@@ -82,26 +82,25 @@ def p9_setup_config():
     e_spacing = (e_upper - e_lower) / num_tnos
 
     config_dict = {
-        "sweep": [],
+        "sweeps": [],
         "bodies": []
     }
 
-    p9_mass = generate_range(6.9, 2.6, 1.6)
+    p9_mass = generate_range(6.9 * 3.00338e-06, 2.6 * 3.00338e-06, 1.6 * 3.00338e-06)
     p9_a = generate_range(460.7, 178.8, 103.3)
     p9_i = generate_range(np.radians(15.6), np.radians(5.2), np.radians(5.4))
     p9_e = generate_range(0.3, 0.1, 0.1)
     p9_longitude_of_perihelion = generate_range(np.radians(246.7), np.radians(15.1), np.radians(13.4))
     p9_longitude_ascending_node = generate_range(np.radians(96.9), np.radians(17.3), np.radians(15.5))
-
     
-    p9_sweep = combinatorial_sweep(100, 
+    p9_sweep = combinatorial_sweep(8, 
         [p9_mass, p9_a, p9_i, p9_e, p9_longitude_of_perihelion, p9_longitude_ascending_node]
     )
     
     for i in range(len(p9_sweep)):
         # convert to argument of perihelion
         p9_sweep[i][-2] -= p9_sweep[i][-1]
-        config_dict["sweep"].append({
+        config_dict["sweeps"].append({
             "name": f"Planet Nine",
             "mass": p9_sweep[i][0],
             "semi_major_axis": p9_sweep[i][1],

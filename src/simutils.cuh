@@ -13,6 +13,9 @@
 #include "constants.cuh"
 #include "json.hpp"
 
+// macro to allocate host memory for the sweep
+#define ALLOCATE_SWEEP_HOST_MEMORY(sweep_name) (sim->sweeps->sweep_name = (double *)malloc(num_bodies * sizeof(double)))
+
 struct Body
 {
   double inclination;
@@ -23,6 +26,16 @@ struct Body
   double semi_major_axis;
   double mass;
   std::string name;
+};
+
+struct Sweep
+{
+  double *masses;
+  double *inclinations;
+  double *longitude_of_ascending_nodes;
+  double *argument_of_perihelion;
+  double *eccentricities;
+  double *semi_major_axes;
 };
 
 struct Sim
@@ -39,6 +52,7 @@ struct Sim
   double *vec_eccentricity;
   double *vec_semi_major_axis;
   std::string *body_names;
+  Sweep *sweeps;
 };
 
 struct PosVel
@@ -108,7 +122,8 @@ __host__ void args_parse(int argc,
                          bool *print_positions,
                          int *num_timesteps,
                          std::string *config_file,
-                         std::string *output_file)
+                         std::string *output_file,
+                         int *device)
 
 {
   for (int i = 0; i < argc; i++)
@@ -132,6 +147,11 @@ __host__ void args_parse(int argc,
     {
       *output_file = std::string(argv[i + 1]);
     }
+
+    if (!strcmp(argv[i], "-d"))
+    {
+      *device = atoi(argv[i + 1]);
+    }
   }
 }
 
@@ -140,14 +160,18 @@ __host__ void pretty_print_positions(Sim *sim, double3 *output_positions, int ba
   int offset = BATCH_SIZE * batch_index;
 
   std::cout << "# Timestep " << offset + 1 << std::endl;
-  for (int j = 0; j < sim->num_bodies; j++)
+  for (int i = 0; i < SWEEPS_PER_GPU; i++)
   {
-    std::cout << sim->body_names[j] << ": "
-              << output_positions[j].x << " "
-              << output_positions[j].y << " "
-              << output_positions[j].z << std::endl;
+    std::cout << "Experiment " << (i + 1) << std::endl;
+    for (int j = 0; j < sim->num_bodies; j++)
+    {
+      std::cout << sim->body_names[j] << ": "
+                << output_positions[i * sim->num_bodies + j].x << " "
+                << output_positions[i * sim->num_bodies + j].y << " "
+                << output_positions[i * sim->num_bodies + j].z << std::endl;
+    }
+    std::cout << std::endl;
   }
-  std::cout << std::endl;
 }
 
 __host__ void sim_from_config_file(Sim *sim,
@@ -191,6 +215,29 @@ __host__ void sim_from_config_file(Sim *sim,
     sim_body.argument_of_perihelion = body["argument_of_perihelion"];
     sim_body.mean_anomaly = body["mean_anomaly"];
     add_body_to_sim(sim, sim_body, i);
+  }
+
+  auto sweeps = config_file_json["sweeps"];
+  int num_sweeps = sweeps.size();
+  if (num_sweeps == 0) return;
+  sim->sweeps = (Sweep *)malloc(sizeof(Sweep));
+  ALLOCATE_SWEEP_HOST_MEMORY(masses);
+  ALLOCATE_SWEEP_HOST_MEMORY(inclinations);
+  ALLOCATE_SWEEP_HOST_MEMORY(longitude_of_ascending_nodes);
+  ALLOCATE_SWEEP_HOST_MEMORY(argument_of_perihelion);
+  ALLOCATE_SWEEP_HOST_MEMORY(eccentricities);
+  ALLOCATE_SWEEP_HOST_MEMORY(semi_major_axes);
+
+  for (int i = 0; i < num_sweeps; i++)
+  {
+    // each sweep is a body
+    auto sweep = sweeps[i];
+    sim->sweeps->masses[i] = sweep["mass"];
+    sim->sweeps->inclinations[i] = sweep["inclination"];
+    sim->sweeps->longitude_of_ascending_nodes[i] = sweep["longitude_of_ascending_node"];
+    sim->sweeps->argument_of_perihelion[i] = sweep["argument_of_perihelion"];
+    sim->sweeps->eccentricities[i] = sweep["eccentricity"];
+    sim->sweeps->semi_major_axes[i] = sweep["semi_major_axis"];
   }
 }
 

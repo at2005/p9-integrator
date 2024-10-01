@@ -11,6 +11,8 @@ functions for my implementation of the Mercury N-body Integrator.
 */
 namespace cg = cooperative_groups;
 
+// map "massive body" indices to block 0 rank
+// if in block zero we do not need to map to zero
 __device__ void get_mapped_pos(double3 **mapped_positions, double3 **mapped_velocities, double **mapped_masses, cg::cluster_group cluster, char *sram)
 {
   size_t velocities_offset = sizeof(double3) * blockDim.x;
@@ -606,6 +608,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double *vec_inclination_hbm,
                                  double *vec_longitude_of_ascending_node_hbm,
                                  double *vec_masses_hbm,
+                                 Sweep *sweep_hbm,
                                  double3 *output_positions_hbm,
                                  int num_massive_bodies,
                                  int batch_idx,
@@ -620,6 +623,8 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   int num_threads = cluster.num_threads();
   int global_idx = cluster.thread_rank();
   int idx = threadIdx.x;
+  cg::grid_group g = cg::this_grid();
+  int cluster_idx = g.cluster_rank();
 
   cluster.sync();
 
@@ -630,7 +635,6 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   double *masses = (double *)(sram + masses_offset);
 
   cluster.sync();
-
   masses[idx] = vec_masses_hbm[global_idx];
   double argument_of_perihelion = vec_argument_of_perihelion_hbm[global_idx];
   double mean_anomaly = vec_mean_anomaly_hbm[global_idx];
@@ -638,6 +642,16 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   double semi_major_axis = vec_semi_major_axis_hbm[global_idx];
   double inclination = vec_inclination_hbm[global_idx];
   double longitude_of_ascending_node = vec_longitude_of_ascending_node_hbm[global_idx];
+
+  if (global_idx == 0 && sweep_hbm != NULL)
+  {
+    longitude_of_ascending_node = sweep_hbm->longitude_of_ascending_nodes[cluster_idx];
+    inclination = sweep_hbm->inclinations[cluster_idx];
+    argument_of_perihelion = sweep_hbm->argument_of_perihelion[cluster_idx];
+    eccentricity = sweep_hbm->eccentricities[cluster_idx];
+    semi_major_axis = sweep_hbm->semi_major_axes[cluster_idx];
+    masses[idx] = sweep_hbm->masses[cluster_idx];
+  }
 
   double half_dt = 0.5 * dt;
   // initially populate positions and velocities
@@ -727,15 +741,9 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
         body_interaction_kick(cluster, sram, (PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, half_dt);
     cluster.sync();
     velocities[idx] = velocity_after_body_interaction;
-
-    // basically the layout here is:
-    // [[body0, body1, body2, ...], [body0, body1, body2, ...], ...]
-    // where each subarray is a timestep
-    // so we need to index into the timestep and then add idx to index a
-    // particular body
   }
 
-  output_positions_hbm[global_idx] = positions[idx];
+  output_positions_hbm[global_idx + cluster_idx * cluster.size()] = positions[idx];
 
   cluster.sync();
   // convert back to heliocentric coordinates
@@ -753,12 +761,22 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
       &semi_major_axis);
   cluster.sync();
   // copy elements to hbm, this is so that the next batch iteration uses these values to pick up where we left off
+
   vec_semi_major_axis_hbm[global_idx] = semi_major_axis;
   vec_eccentricity_hbm[global_idx] = eccentricity;
   vec_mean_anomaly_hbm[global_idx] = mean_anomaly;
   vec_argument_of_perihelion_hbm[global_idx] = argument_of_perihelion;
   vec_inclination_hbm[global_idx] = inclination;
   vec_longitude_of_ascending_node_hbm[global_idx] = longitude_of_ascending_node;
+
+  if (global_idx == 0 && sweep_hbm != NULL)
+  {
+    sweep_hbm->longitude_of_ascending_nodes[cluster_idx] = longitude_of_ascending_node;
+    sweep_hbm->inclinations[cluster_idx] = inclination;
+    sweep_hbm->argument_of_perihelion[cluster_idx] = argument_of_perihelion;
+    sweep_hbm->eccentricities[cluster_idx] = eccentricity;
+    sweep_hbm->semi_major_axes[cluster_idx] = semi_major_axis;
+  }
 }
 
 #endif

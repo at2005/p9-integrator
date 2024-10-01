@@ -1,7 +1,5 @@
 # A CUDA implementation of the Mercury N-body Integrator for use on GPU Supercomputing Clusters
 
-TODO: optimize the hell out of this.
-
 Note: Units are such that G=1, ie mass is in solar masses, distance is in AU, time is in years, etc.
 
 ## Compiling
@@ -19,3 +17,4 @@ Run the binary on a GPU node using `./bin/mint` with a set of command line argum
 - `-i` prints simulation information
 - `-p` prints positions at each timestep for each body in the simulation
 - `-t` sets the number of timesteps to run the simulation for (default is 1)
+- `-d` sets the GPU device to use (default is 0)
