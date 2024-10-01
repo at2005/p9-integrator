@@ -182,7 +182,8 @@ def p9_setup_config():
         "mean_anomaly": np.random.uniform(0, 2*np.pi)
         })
     
-    config_dict["bodies"].sort(key=lambda x: x["mass"], reverse=True)
+    # ensure that p9 is always the first body, assumption we make for kernel lol
+    config_dict["bodies"] = [config_dict["bodies"][0]] + sorted(config_dict["bodies"][1:], key=lambda x: x["mass"], reverse=True)
 
     with open("../examples/p9.json", "w") as f:
         json.dump(config_dict, f, indent=4) 
