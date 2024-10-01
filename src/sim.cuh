@@ -311,16 +311,16 @@ __device__ double3 body_interaction_kick(
     double r;
     efficient_magnitude(&r, &r_sq, dist);
 
-    // // compute both K and r_crit
-    // KR_Crit changeover_vals = changeover(cluster, sram, current_coords, i, dt);
+    // compute both K and r_crit
+    KR_Crit changeover_vals = changeover(cluster, sram, current_coords, i, dt);
 
-    // double changeover_weight = changeover_vals.K;
-    // double r_crit = changeover_vals.r_crit;
-    // if (possible_close_encounter)
-    // {
-    //   // 1 - K weighting if close encounter
-    //   changeover_weight = (r <= r_crit) * (1 - changeover_weight) + (r > r_crit) * changeover_weight;
-    // }
+    double changeover_weight = changeover_vals.K;
+    double r_crit = changeover_vals.r_crit;
+    if (possible_close_encounter)
+    {
+      // 1 - K weighting if close encounter
+      changeover_weight = (r <= r_crit) * (1 - changeover_weight) + (r > r_crit) * changeover_weight;
+    }
 
     // add smoothing constant
     r_sq += (double)(idx != i) * SMOOTHING_CONSTANT_SQUARED;
@@ -329,7 +329,7 @@ __device__ double3 body_interaction_kick(
     double force_denom = r_sq * r;
 
     double weighted_acceleration =
-        /*changeover_weight */ stable_division(masses_other[i], force_denom);
+        changeover_weight * stable_division(masses_other[i], force_denom);
     // // accumulate total acceleration due to all bodies, except self
     acc.x = fma(weighted_acceleration, dist.x, acc.x);
     acc.y = fma(weighted_acceleration, dist.y, acc.y);
