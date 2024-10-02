@@ -11,5 +11,4 @@
 #define BATCH_SIZE 100
 #define SWEEPS_PER_GPU 8
 // we have a 8 GPU node for now
-#define NUM_GPUS 8
 #endif

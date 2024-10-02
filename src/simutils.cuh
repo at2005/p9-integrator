@@ -176,7 +176,8 @@ __host__ void pretty_print_positions(Sim *sim, double3 *output_positions, int ba
 
 __host__ void sim_from_config_file(Sim *sim,
                                    std::string config_file,
-                                   int num_timesteps)
+                                   int num_timesteps,
+                                   int device)
 {
   /*
   The structure of the JSON config file is as follows:
@@ -228,7 +229,7 @@ __host__ void sim_from_config_file(Sim *sim,
   ALLOCATE_SWEEP_HOST_MEMORY(eccentricities);
   ALLOCATE_SWEEP_HOST_MEMORY(semi_major_axes);
 
-  for (int i = 0; i < num_sweeps; i++)
+  for (int i = device; i < num_sweeps; i++)
   {
     // each sweep is a body
     auto sweep = sweeps[i];

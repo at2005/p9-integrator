@@ -37,7 +37,7 @@ __host__ int main(int argc, char **argv)
   // we'll be launching multiple processes using a script, so set device via cli arg
   cudaSetDevice(device);
   Sim sim;
-  sim_from_config_file(&sim, config_file, NUM_TIMESTEPS);
+  sim_from_config_file(&sim, config_file, NUM_TIMESTEPS, device);
 
   // set integration timestep to the one BB21 use
   double dt = 0.8219;
