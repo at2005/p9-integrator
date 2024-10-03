@@ -21,7 +21,7 @@ __host__ int main(int argc, char **argv)
   // cli args
   bool print_sim_info = false;
   bool print_positions = false;
-  std::string output_file;
+  std::string output_file = "";
   std::string config_file;
   int NUM_TIMESTEPS;
   int device = 0;
@@ -203,8 +203,7 @@ __host__ int main(int argc, char **argv)
                sim.num_bodies * sizeof(double3) * SWEEPS_PER_GPU,
                cudaMemcpyDeviceToHost);
 
-    pretty_print_positions(&sim, output_positions, batch);
-    // if(output_file != "") write_output(output_positions, batch, output_file);
+    if (print_positions) write_positions(&sim, output_positions, output_file, batch, device);
   }
 
   cudaFree(vec_longitude_of_ascending_node_device);

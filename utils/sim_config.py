@@ -93,7 +93,7 @@ def p9_setup_config():
     p9_longitude_of_perihelion = generate_range(np.radians(246.7), np.radians(15.1), np.radians(13.4))
     p9_longitude_ascending_node = generate_range(np.radians(96.9), np.radians(17.3), np.radians(15.5))
     
-    p9_sweep = combinatorial_sweep(64, 
+    p9_sweep = combinatorial_sweep(8 * 4, 
         [p9_mass, p9_a, p9_i, p9_e, p9_longitude_of_perihelion, p9_longitude_ascending_node]
     )
     

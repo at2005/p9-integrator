@@ -14,7 +14,7 @@
 #include "json.hpp"
 
 // macro to allocate host memory for the sweep
-#define ALLOCATE_SWEEP_HOST_MEMORY(sweep_name) (sim->sweeps->sweep_name = (double *)malloc(num_bodies * sizeof(double)))
+#define ALLOCATE_SWEEP_HOST_MEMORY(sweep_name) (sim->sweeps->sweep_name = (double *)malloc(SWEEPS_PER_GPU * sizeof(double)))
 
 struct Body
 {
@@ -155,23 +155,37 @@ __host__ void args_parse(int argc,
   }
 }
 
-__host__ void pretty_print_positions(Sim *sim, double3 *output_positions, int batch_index)
+__host__ void write_positions(Sim *sim, double3 *output_positions, std::string file_name, int batch_index, int device)
 {
   int offset = BATCH_SIZE * batch_index;
+  if (file_name == "")
+  {
+    file_name = "output_" + std::to_string(device);
+  }
+  std::ofstream file(file_name, std::ios::app);
+  if (!file)
+  {
+    std::cerr << "Error opening file: " << file_name << std::endl;
+    return;
+  }
 
-  std::cout << "# Timestep " << offset + 1 << std::endl;
+  file << "# Timestep " << offset + 1 << std::endl;
   for (int i = 0; i < SWEEPS_PER_GPU; i++)
   {
-    std::cout << "Experiment " << (i + 1) << std::endl;
+    file << "Experiment " << (i + 1) << std::endl;
     for (int j = 0; j < sim->num_bodies; j++)
     {
-      std::cout << sim->body_names[j] << ": "
-                << output_positions[i * sim->num_bodies + j].x << " "
-                << output_positions[i * sim->num_bodies + j].y << " "
-                << output_positions[i * sim->num_bodies + j].z << std::endl;
+      file << sim->body_names[j] << ": "
+           << output_positions[i * sim->num_bodies + j].x << " "
+           << output_positions[i * sim->num_bodies + j].y << " "
+           << output_positions[i * sim->num_bodies + j].z << std::endl;
     }
-    std::cout << std::endl;
+    file << std::endl;
   }
+
+  file << std::endl;
+
+  file.close();
 }
 
 __host__ void sim_from_config_file(Sim *sim,
@@ -229,8 +243,9 @@ __host__ void sim_from_config_file(Sim *sim,
   ALLOCATE_SWEEP_HOST_MEMORY(eccentricities);
   ALLOCATE_SWEEP_HOST_MEMORY(semi_major_axes);
 
-  for (int i = device; i < num_sweeps; i++)
+  for (int idx = 0; idx < SWEEPS_PER_GPU; idx++)
   {
+    int i = idx + SWEEPS_PER_GPU * device;
     // each sweep is a body
     auto sweep = sweeps[i];
     sim->sweeps->masses[i] = sweep["mass"];
