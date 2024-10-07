@@ -55,6 +55,13 @@ __device__ void efficient_magnitude(double *mag, double *mag_sq, const double3 &
   *mag = stable_sqrt(*mag_sq);
 }
 
+__device__ double stable_log(double x)
+{
+  double gtz = (double)(x > 0.00);
+  double lez = (double)(x <= 0.00);
+  return log(x * gtz + lez);
+}
+
 __device__ double stable_acos(double x)
 {
   double alto = (double)(fabs(x) <= 1.00);
@@ -167,6 +174,22 @@ __device__ KR_Crit changeover(
   return res;
 }
 
+__device__ double hyperbolic_solver(double eccentricity, double mean_anomaly)
+{
+  // M = e*sinh(H) - H, we are solving for H
+  double H = mean_anomaly;
+  for (int i = 0; i < MAX_ITERATIONS_ROOT_FINDING * 2; i++)
+  {
+    double e_cosh = eccentricity * cosh(H);
+    double e_sinh = eccentricity * sinh(H);
+    double f = mean_anomaly - e_sinh + H;
+    double f_prime = 1.00 - e_cosh;
+    H -= f / f_prime;
+  }
+
+  return H;
+}
+
 __device__ PosVel cartesian_from_elements(double inclination,
                                           double longitude_of_ascending_node,
                                           double argument_of_perihelion,
@@ -191,16 +214,35 @@ __device__ PosVel cartesian_from_elements(double inclination,
   double d22 = fma(z1, cos_i, -z4);
   double d23 = cos_a * sin_i;
 
-  double romes = stable_sqrt(1 - eccentricity * eccentricity);
-  double eccentric_anomaly = danby_burkardt(mean_anomaly, eccentricity);
-  double sin_E, cos_E;
-  sincos(eccentric_anomaly, &sin_E, &cos_E);
-  z1 = semi_major_axis * (cos_E - eccentricity);
-  z2 = semi_major_axis * romes * sin_E;
-  eccentric_anomaly =
-      stable_sqrt(1.00 / semi_major_axis) / (1.0 - eccentricity * cos_E);
-  z3 = -sin_E * eccentric_anomaly;
-  z4 = romes * cos_E * eccentric_anomaly;
+  if (eccentricity < 1.00)
+  {
+    double romes = stable_sqrt(1 - eccentricity * eccentricity);
+    double eccentric_anomaly = danby_burkardt(mean_anomaly, eccentricity);
+    double sin_E, cos_E;
+    sincos(eccentric_anomaly, &sin_E, &cos_E);
+    z1 = semi_major_axis * (cos_E - eccentricity);
+    z2 = semi_major_axis * romes * sin_E;
+    eccentric_anomaly =
+        stable_sqrt(1.00 / semi_major_axis) / (fma(-eccentricity, cos_E, 1.00));
+    z3 = -sin_E * eccentric_anomaly;
+    z4 = romes * cos_E * eccentric_anomaly;
+  }
+
+  // parabolic orbits are extremely unlikely so won't be going into them here
+  // let's just support hyperbolic orbits in case it's messing with our tno close encounter sim
+  else if (eccentricity > 1.00)
+  {
+    double hyperbolic_soln = hyperbolic_solver(eccentricity, mean_anomaly);
+    double romes = stable_sqrt(fma(eccentricity, eccentricity, -1.00));
+    double sinh_hyperbolic_soln = sinh(hyperbolic_soln);
+    double cosh_hyperbolic_soln = cosh(hyperbolic_soln);
+    z1 = semi_major_axis * (cosh_hyperbolic_soln - eccentricity);
+    z2 = -semi_major_axis * romes * sinh_hyperbolic_soln;
+    double temp = stable_division(stable_sqrt(stable_division(1.00, fabs(semi_major_axis))), (eccentricity * cosh_hyperbolic_soln - 1.00));
+    z3 = -sinh_hyperbolic_soln * temp;
+    z4 = romes * cosh_hyperbolic_soln * temp;
+  }
+
   PosVel res;
   res.pos = make_double3(fma(d11, z1, d21 * z2),
                          fma(d12, z1, d22 * z2),
@@ -232,6 +274,7 @@ __device__ void elements_from_cartesian(
   double inclination = stable_acos(angular_momentum.z * rsqrt(h_sq));
   double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y);
 
+  double r_v = (current_p.x * current_v.x) + (current_p.y * current_v.y) + (current_p.z * current_v.z);
   double v_sq = magnitude_squared(current_v);
   double r = norm3d(current_p.x, current_p.y, current_p.z);
   double s = h_sq;
@@ -261,14 +304,29 @@ __device__ void elements_from_cartesian(
   // set to pi/2 if e = 0
   double E_anomaly = stable_acos(cos_E_anomaly);
   // set to true longitude if e = 0
+  double r_v_ltz = (double)(r_v < 0.00);
+  E_anomaly = fma(r_v_ltz, TWOPI, copysign(E_anomaly, r_v));
+
   double M_anomaly = netz * fma(-eccentricity, sin(E_anomaly), E_anomaly) + etz * true_longitude;
+
+  double e_gto = (double)(eccentricity > 1.00);
+  double e_ngto = (double)(eccentricity < 1.00);
+  E_anomaly = e_gto * stable_log(cos_E_anomaly + stable_sqrt(fma(cos_E_anomaly, cos_E_anomaly, -1.00))) + e_ngto * E_anomaly;
+  E_anomaly = e_gto * copysign(E_anomaly, r_v) + e_ngto * E_anomaly;
+  M_anomaly = e_gto * fma(eccentricity, sinh(E_anomaly), -E_anomaly) + e_ngto * M_anomaly;
+
   // set to zero if e = 0
   double cos_f = stable_division((s - r), (eccentricity * r));
   // set to pi/2 if e = 0
   double f = stable_acos(cos_f);
+  f = (r_v_ltz * TWOPI) + copysign(f, r_v);
   double p = true_longitude - f;
   // p set to zero if e = 0
   p = netz * fmod(p + TWOPI + TWOPI, TWOPI);
+
+  double M_ltz = (double)(M_anomaly < 0.00);
+  M_anomaly = fma(M_ltz, TWOPI, M_anomaly);
+  M_anomaly = fmod(M_anomaly, TWOPI);
 
   // argument of perihelion
   double argument_of_perihelion = p - longitude_of_ascending_node;

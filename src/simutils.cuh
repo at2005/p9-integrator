@@ -175,10 +175,19 @@ __host__ void write_positions(Sim *sim, double3 *output_positions, std::string f
     file << "Experiment " << (i + 1) << std::endl;
     for (int j = 0; j < sim->num_bodies; j++)
     {
+      double x = output_positions[i * sim->num_bodies + j].x;
+      double y = output_positions[i * sim->num_bodies + j].y;
+      double z = output_positions[i * sim->num_bodies + j].z;
+
+      if (isnan(x) || isnan(y) || isnan(z))
+      {
+        std::cerr << "NaN detected in output_positions. On timestep " << offset + 1 << std::endl;
+      }
+
       file << sim->body_names[j] << ": "
-           << output_positions[i * sim->num_bodies + j].x << " "
-           << output_positions[i * sim->num_bodies + j].y << " "
-           << output_positions[i * sim->num_bodies + j].z << std::endl;
+           << x << " "
+           << y << " "
+           << z << std::endl;
     }
     file << std::endl;
   }
@@ -248,12 +257,12 @@ __host__ void sim_from_config_file(Sim *sim,
     int i = idx + SWEEPS_PER_GPU * device;
     // each sweep is a body
     auto sweep = sweeps[i];
-    sim->sweeps->masses[i] = sweep["mass"];
-    sim->sweeps->inclinations[i] = sweep["inclination"];
-    sim->sweeps->longitude_of_ascending_nodes[i] = sweep["longitude_of_ascending_node"];
-    sim->sweeps->argument_of_perihelion[i] = sweep["argument_of_perihelion"];
-    sim->sweeps->eccentricities[i] = sweep["eccentricity"];
-    sim->sweeps->semi_major_axes[i] = sweep["semi_major_axis"];
+    sim->sweeps->masses[idx] = sweep["mass"];
+    sim->sweeps->inclinations[idx] = sweep["inclination"];
+    sim->sweeps->longitude_of_ascending_nodes[idx] = sweep["longitude_of_ascending_node"];
+    sim->sweeps->argument_of_perihelion[idx] = sweep["argument_of_perihelion"];
+    sim->sweeps->eccentricities[idx] = sweep["eccentricity"];
+    sim->sweeps->semi_major_axes[idx] = sweep["semi_major_axis"];
   }
 }
 
