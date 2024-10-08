@@ -96,8 +96,16 @@ __device__ double danby_burkardt(double mean_anomaly, double eccentricity)
   {
     double sin_E, cos_E;
     sincos(E, &sin_E, &cos_E);
+    double e_ngto = (double)(eccentricity < 1.00);
+    double e_gto = (double)(eccentricity > 1.00);
+    sin_E = e_ngto * sin_E + e_gto * sinh(E);
+    cos_E = e_ngto * cos_E + e_gto * cosh(E);
+
     double e_sin = eccentricity * sin_E;
-    double f = E - e_sin - mean_anomaly;
+    // f = M - esinh + H
+    double sign = copysign(1.00, eccentricity - 1);
+    double f = (sign * mean_anomaly) - e_sin + E;
+    // double f = E - e_sin - mean_anomaly;
     double e_cos = eccentricity * cos_E;
     double f_prime = 1 - e_cos;
     double dE = -f / f_prime;
@@ -174,7 +182,7 @@ __device__ KR_Crit changeover(
   return res;
 }
 
-__device__ double hyperbolic_solver(double eccentricity, double mean_anomaly)
+__device__ double hyperbolic_solver(double mean_anomaly, double eccentricity)
 {
   // M = e*sinh(H) - H, we are solving for H
   double H = mean_anomaly;
@@ -184,7 +192,7 @@ __device__ double hyperbolic_solver(double eccentricity, double mean_anomaly)
     double e_sinh = eccentricity * sinh(H);
     double f = mean_anomaly - e_sinh + H;
     double f_prime = 1.00 - e_cosh;
-    H -= f / f_prime;
+    //   H -= stable_division(f, f_prime);
   }
 
   return H;
@@ -214,34 +222,23 @@ __device__ PosVel cartesian_from_elements(double inclination,
   double d22 = fma(z1, cos_i, -z4);
   double d23 = cos_a * sin_i;
 
-  if (eccentricity < 1.00)
-  {
-    double romes = stable_sqrt(1 - eccentricity * eccentricity);
-    double eccentric_anomaly = danby_burkardt(mean_anomaly, eccentricity);
-    double sin_E, cos_E;
-    sincos(eccentric_anomaly, &sin_E, &cos_E);
-    z1 = semi_major_axis * (cos_E - eccentricity);
-    z2 = semi_major_axis * romes * sin_E;
-    eccentric_anomaly =
-        stable_sqrt(1.00 / semi_major_axis) / (fma(-eccentricity, cos_E, 1.00));
-    z3 = -sin_E * eccentric_anomaly;
-    z4 = romes * cos_E * eccentric_anomaly;
-  }
+  double romes = stable_sqrt(copysign(1.00, eccentricity - 1) * fma(eccentricity, eccentricity, -1.00));
+  double e_gto = (double)(eccentricity > 1.00);
+  double e_ngto = (double)(eccentricity < 1.00);
 
-  // parabolic orbits are extremely unlikely so won't be going into them here
-  // let's just support hyperbolic orbits in case it's messing with our tno close encounter sim
-  else if (eccentricity > 1.00)
-  {
-    double hyperbolic_soln = hyperbolic_solver(eccentricity, mean_anomaly);
-    double romes = stable_sqrt(fma(eccentricity, eccentricity, -1.00));
-    double sinh_hyperbolic_soln = sinh(hyperbolic_soln);
-    double cosh_hyperbolic_soln = cosh(hyperbolic_soln);
-    z1 = semi_major_axis * (cosh_hyperbolic_soln - eccentricity);
-    z2 = -semi_major_axis * romes * sinh_hyperbolic_soln;
-    double temp = stable_division(stable_sqrt(stable_division(1.00, fabs(semi_major_axis))), (eccentricity * cosh_hyperbolic_soln - 1.00));
-    z3 = -sinh_hyperbolic_soln * temp;
-    z4 = romes * cosh_hyperbolic_soln * temp;
-  }
+  double eccentric_anomaly = danby_burkardt(mean_anomaly, eccentricity);
+  double sin_E, cos_E;
+  sincos(eccentric_anomaly, &sin_E, &cos_E);
+  sin_E = fma(e_ngto, sin_E, e_gto * sinh(eccentric_anomaly));
+  cos_E = fma(e_ngto, cos_E, e_gto * cosh(eccentric_anomaly));
+  z1 = semi_major_axis * (cos_E - eccentricity);
+  z2 = copysign(1.00, 1 - eccentricity) * semi_major_axis * romes * sin_E;
+
+  eccentric_anomaly =
+      stable_division(stable_sqrt(stable_division(1.00, fabs(semi_major_axis))), copysign(1.00, 1 - eccentricity) * (fma(-eccentricity, cos_E, 1.00)));
+
+  z3 = -sin_E * eccentric_anomaly;
+  z4 = romes * cos_E * eccentric_anomaly;
 
   PosVel res;
   res.pos = make_double3(fma(d11, z1, d21 * z2),
@@ -274,7 +271,7 @@ __device__ void elements_from_cartesian(
   double inclination = stable_acos(angular_momentum.z * rsqrt(h_sq));
   double longitude_of_ascending_node = atan2(angular_momentum.x, -angular_momentum.y);
 
-  double r_v = (current_p.x * current_v.x) + (current_p.y * current_v.y) + (current_p.z * current_v.z);
+  double r_v = fma(current_p.x, current_v.x, fma(current_p.y, current_v.y, (current_p.z * current_v.z)));
   double v_sq = magnitude_squared(current_v);
   double r = norm3d(current_p.x, current_p.y, current_p.z);
   double s = h_sq;
@@ -311,15 +308,15 @@ __device__ void elements_from_cartesian(
 
   double e_gto = (double)(eccentricity > 1.00);
   double e_ngto = (double)(eccentricity < 1.00);
-  E_anomaly = e_gto * stable_log(cos_E_anomaly + stable_sqrt(fma(cos_E_anomaly, cos_E_anomaly, -1.00))) + e_ngto * E_anomaly;
-  E_anomaly = e_gto * copysign(E_anomaly, r_v) + e_ngto * E_anomaly;
-  M_anomaly = e_gto * fma(eccentricity, sinh(E_anomaly), -E_anomaly) + e_ngto * M_anomaly;
+  E_anomaly = fma(e_gto, stable_log(cos_E_anomaly + stable_sqrt(fma(cos_E_anomaly, cos_E_anomaly, -1.00))), e_ngto * E_anomaly);
+  E_anomaly = fma(e_gto, copysign(E_anomaly, r_v), e_ngto * E_anomaly);
+  M_anomaly = fma(e_gto, fma(eccentricity, sinh(E_anomaly), -E_anomaly), e_ngto * M_anomaly);
 
   // set to zero if e = 0
   double cos_f = stable_division((s - r), (eccentricity * r));
   // set to pi/2 if e = 0
   double f = stable_acos(cos_f);
-  f = (r_v_ltz * TWOPI) + copysign(f, r_v);
+  f = fma(r_v_ltz, TWOPI, copysign(f, r_v));
   double p = true_longitude - f;
   // p set to zero if e = 0
   p = netz * fmod(p + TWOPI + TWOPI, TWOPI);
