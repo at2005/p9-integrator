@@ -182,22 +182,6 @@ __device__ KR_Crit changeover(
   return res;
 }
 
-__device__ double hyperbolic_solver(double mean_anomaly, double eccentricity)
-{
-  // M = e*sinh(H) - H, we are solving for H
-  double H = mean_anomaly;
-  for (int i = 0; i < MAX_ITERATIONS_ROOT_FINDING * 2; i++)
-  {
-    double e_cosh = eccentricity * cosh(H);
-    double e_sinh = eccentricity * sinh(H);
-    double f = mean_anomaly - e_sinh + H;
-    double f_prime = 1.00 - e_cosh;
-    //   H -= stable_division(f, f_prime);
-  }
-
-  return H;
-}
-
 __device__ PosVel cartesian_from_elements(double inclination,
                                           double longitude_of_ascending_node,
                                           double argument_of_perihelion,
