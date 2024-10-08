@@ -63,6 +63,8 @@ def planetesimal_setup_config():
     with open("../examples/planetary_embryos.json", "w") as f:
         json.dump(config_dict, f, indent=4) 
 
+def aphelion_to_ecc(aphelion, semi_major_axis):
+    return (aphelion / semi_major_axis) - 1
 
 def p9_setup_config():
     """
@@ -86,17 +88,18 @@ def p9_setup_config():
         "bodies": []
     }
 
-    p9_mass = generate_range(6.9 * 3.00338e-06, 2.6 * 3.00338e-06, 1.6 * 3.00338e-06)
-    p9_a = generate_range(460.7, 178.8, 103.3)
+    p9_mass = generate_range(6.6 * 3.00338e-06, 2.6 * 3.00338e-06, 1.7 * 3.00338e-06)
+    p9_a = generate_range(500, 170, 120)
+    
     p9_i = generate_range(np.radians(15.6), np.radians(5.2), np.radians(5.4))
-    p9_e = generate_range(0.3, 0.1, 0.1)
+    p9_e = generate_range(0.26, 0.1, 0.1)
     p9_longitude_of_perihelion = generate_range(np.radians(246.7), np.radians(15.1), np.radians(13.4))
     p9_longitude_ascending_node = generate_range(np.radians(96.9), np.radians(17.3), np.radians(15.5))
     
     p9_sweep = combinatorial_sweep(8 * 4, 
         [p9_mass, p9_a, p9_i, p9_e, p9_longitude_of_perihelion, p9_longitude_ascending_node]
     )
-    
+
     for i in range(len(p9_sweep)):
         # convert to argument of perihelion
         p9_sweep[i][-2] -= p9_sweep[i][-1]

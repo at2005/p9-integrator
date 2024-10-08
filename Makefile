@@ -18,4 +18,4 @@ $(TARGET): $(SOURCE) | $(BIN_DIR)
 
 clean:
 	rm -rf $(BIN_DIR)
-	for i in $(shell seq 0 7); do rm -f output_$$i; done
+	for i in $(shell seq 0 7); do rm -f output_$$i; rm -f output_$$i.gz; done
