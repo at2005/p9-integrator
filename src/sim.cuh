@@ -10,10 +10,9 @@ This file contains the core numerical integration kernel and associated helper
 functions for my implementation of the Mercury N-body Integrator.
 */
 namespace cg = cooperative_groups;
-
 // map "massive body" indices to block 0 rank
 // if in block zero we do not need to map to zero
-__device__ void get_mapped_pos(double3 **mapped_positions, double3 **mapped_velocities, double **mapped_masses, cg::cluster_group cluster, char *sram)
+__device__ void get_mapped_block(double3 **mapped_positions, double3 **mapped_velocities, double **mapped_masses, cg::cluster_group cluster, char *sram)
 {
   size_t velocities_offset = sizeof(double3) * blockDim.x;
   size_t masses_offset = velocities_offset + sizeof(double3) * blockDim.x;
@@ -156,22 +155,17 @@ __device__ double fetch_r_crit(
 }
 
 __device__ KR_Crit changeover(
-    cg::cluster_group cluster,
-    char *sram,
     PosVel current_coords,
     int idx_other,
-    double dt)
+    double dt,
+    MappedBlock *mapped_block)
 {
   int idx = threadIdx.x;
   double r_crit = 0.06;  // fetch_r_crit(current_coords, positions, velocities, masses, idx_other, dt);
   KR_Crit res;
   res.r_crit = r_crit;
   // we can assume that massive bodies are in cluster 0
-  double3 *positions_other;
-  double3 *velocities_other;
-  double *masses_other;
-  get_mapped_pos(&positions_other, &velocities_other, &masses_other, cluster, sram);
-  double r_ij = (double)(idx != idx_other) * dist(positions_other[idx_other], current_coords.pos);
+  double r_ij = (double)(idx != idx_other) * dist(mapped_block->positions[idx_other], current_coords.pos);
   double y = (r_ij - 0.1 * r_crit) / (0.9 * r_crit);
   double K = y * y / (2 * y * y - 2 * y + 1);
   // trying to avoid branching
@@ -236,7 +230,6 @@ __device__ PosVel cartesian_from_elements(double inclination,
 }
 
 __device__ void elements_from_cartesian(
-    cg::cluster_group cluster,
     const double3 *current_positions,
     const double3 *current_velocities,
     double *current_inclination,
@@ -323,12 +316,11 @@ __device__ void elements_from_cartesian(
 
 // this function returns an updated velocity
 __device__ double3 body_interaction_kick(
-    cg::cluster_group cluster,
-    char *sram,
     PosVel current_coords,
     // position and velocity arrays are read-only
     int num_massive_bodies,
     double dt,
+    MappedBlock *mapped_block,
     bool possible_close_encounter = false)
 {
   int idx = threadIdx.x;
@@ -337,23 +329,19 @@ __device__ double3 body_interaction_kick(
   double3 dist;
   for (int i = 0; i < num_massive_bodies; i++)
   {
-    double3 *positions_other;
-    double3 *velocities_other;
-    double *masses_other;
-    get_mapped_pos(&positions_other, &velocities_other, &masses_other, cluster, sram);
     // 3-vec displacement, let r = x, y, z, this is the direction of the
     // acceleration it is directed towards the other body since gravity is
     // attractive
-    dist.x = positions_other[i].x - my_position.x;
-    dist.y = positions_other[i].y - my_position.y;
-    dist.z = positions_other[i].z - my_position.z;
+    dist.x = mapped_block->positions[i].x - my_position.x;
+    dist.y = mapped_block->positions[i].y - my_position.y;
+    dist.z = mapped_block->positions[i].z - my_position.z;
 
     double r_sq;
     double r;
     efficient_magnitude(&r, &r_sq, dist);
 
     // compute both K and r_crit
-    KR_Crit changeover_vals = changeover(cluster, sram, current_coords, i, dt);
+    KR_Crit changeover_vals = changeover(current_coords, i, dt, mapped_block);
 
     double changeover_weight = changeover_vals.K;
     double r_crit = changeover_vals.r_crit;
@@ -370,7 +358,7 @@ __device__ double3 body_interaction_kick(
     double force_denom = r_sq * r;
 
     double weighted_acceleration =
-        changeover_weight * stable_division(masses_other[i], force_denom);
+        changeover_weight * stable_division(mapped_block->masses[i], force_denom);
     // // accumulate total acceleration due to all bodies, except self
     acc.x = fma(weighted_acceleration, dist.x, acc.x);
     acc.y = fma(weighted_acceleration, dist.y, acc.y);
@@ -385,11 +373,10 @@ __device__ double3 body_interaction_kick(
 }
 
 __device__ double3 main_body_kinetic(
-    cg::cluster_group cluster,
-    char *sram,
     const double3 *positions,
     int num_massive_bodies,
-    double dt)
+    double dt,
+    MappedBlock *mapped_block)
 {
   int idx = threadIdx.x;
   double3 my_position = positions[idx];
@@ -397,14 +384,9 @@ __device__ double3 main_body_kinetic(
   // calculate total momentum of all bodies
   for (int i = 0; i < num_massive_bodies; i++)
   {
-    double3 *positions_other;
-    double3 *velocities_other;
-    double *masses_other;
-    get_mapped_pos(&positions_other, &velocities_other, &masses_other, cluster, sram);
-
-    p.x = fma(masses_other[i], velocities_other[i].x, p.x);
-    p.y = fma(masses_other[i], velocities_other[i].y, p.y);
-    p.z = fma(masses_other[i], velocities_other[i].z, p.z);
+    p.x = fma(mapped_block->masses[i], mapped_block->velocities[i].x, p.x);
+    p.y = fma(mapped_block->masses[i], mapped_block->velocities[i].y, p.y);
+    p.z = fma(mapped_block->masses[i], mapped_block->velocities[i].z, p.z);
   }
 
   // assume central mass is 1
@@ -417,11 +399,10 @@ __device__ double3 main_body_kinetic(
 // this numerically advances the velocity, taking into account the masses of all
 // bodies (incl sun)
 __device__ double3 update_my_velocity_total(
-    cg::cluster_group cluster,
-    char *sram,
     PosVel current_coords,
     int num_massive_bodies,
-    double dt)
+    double dt,
+    MappedBlock *mapped_block)
 
 {
   /*
@@ -432,7 +413,7 @@ __device__ double3 update_my_velocity_total(
   const double3 my_position = current_coords.pos;
   // the body interaction kick updates velocities based on the masses of all
   // minor bodies
-  double3 my_velocity = body_interaction_kick(cluster, sram, current_coords, num_massive_bodies, dt, true);
+  double3 my_velocity = body_interaction_kick(current_coords, num_massive_bodies, dt, mapped_block, true);
   // now for the main body:
   // update acceleration due to main body
   // a = - G * M / r^3 * r, which in this case simplifies to 1/(r^3) * r_vec
@@ -453,12 +434,11 @@ __device__ double3 update_my_velocity_total(
 }
 
 __device__ PosVel modified_midpoint(
-    cg::cluster_group cluster,
-    char *sram,
     PosVel current_coords,
     int num_massive_bodies,
     double dt,
-    int N)
+    int N,
+    MappedBlock *mapped_block)
 {
   /*
   returns an updated position based on the modified midpoint method.
@@ -476,7 +456,7 @@ __device__ PosVel modified_midpoint(
   double3 z_0 = current_coords.pos;
   current_coords.pos = z_1;
   current_coords.vel =
-      update_my_velocity_total(cluster, sram, current_coords, num_massive_bodies, subdelta);
+      update_my_velocity_total(current_coords, num_massive_bodies, subdelta, mapped_block);
 
   // so now, we need to calculate z_(m+1) using z_(m-1)
   // we can store z_(m-1) in z_0 and z_(m+1) in z_1
@@ -495,7 +475,7 @@ __device__ PosVel modified_midpoint(
     current_coords.pos = z_1;
     // update velocities
     current_coords.vel =
-        update_my_velocity_total(cluster, sram, current_coords, num_massive_bodies, subdelta);
+        update_my_velocity_total(current_coords, num_massive_bodies, subdelta, mapped_block);
   }
 
   // final little bit
@@ -511,22 +491,21 @@ __device__ PosVel modified_midpoint(
 }
 
 __device__ PosVel richardson_extrapolation(
-    cg::cluster_group cluster,
-    char *sram,
     PosVel current_coords,
     int num_massive_bodies,
-    double dt)
+    double dt,
+    MappedBlock *mapped_block)
 {
   uint32_t N = 1;
   PosVel out;
   PosVel buffer[MAX_ROWS_RICHARDSON][MAX_ROWS_RICHARDSON];
   // for our first approx, we use the OG dt
-  buffer[0][0] = modified_midpoint(cluster, sram, current_coords, num_massive_bodies, dt, N);
+  buffer[0][0] = modified_midpoint(current_coords, num_massive_bodies, dt, N, mapped_block);
   for (int i = 1; i < MAX_ROWS_RICHARDSON; i++)
   {
     N <<= 1;
     // N = pow(2, i);
-    buffer[i][0] = modified_midpoint(cluster, sram, current_coords, num_massive_bodies, dt, N);
+    buffer[i][0] = modified_midpoint(current_coords, num_massive_bodies, dt, N, mapped_block);
 
     for (int j = 1; j <= i; j++)
     {
@@ -564,16 +543,12 @@ __device__ PosVel richardson_extrapolation(
 
 // this ensures that the sun is in a reference frame in which it is stationary
 // and at the origin
-__device__ void democratic_heliocentric_conversion(
-    cg::cluster_group cluster,
-    char *sram,
-    double3 *positions,
-    double3 *velocities,
-    double *masses,
+__device__ double3 democratic_heliocentric_conversion(
+    PosVel current_coords,
     int num_massive_bodies,
+    MappedBlock *mapped_block,
     bool reverse = false)
 {
-  int idx = threadIdx.x;
   double total_mass = 0.0;
   double not_reverse_d = (double)(!reverse);
   double add_or_sub = pow(-1, not_reverse_d);
@@ -581,20 +556,11 @@ __device__ void democratic_heliocentric_conversion(
   double3 mass_weighted_v = make_double3(0.0, 0.0, 0.0);
   for (int i = 0; i < num_massive_bodies; i++)
   {
-    double3 *positions_other;
-    double3 *velocities_other;
-    double *masses_other;
-    get_mapped_pos(&positions_other, &velocities_other, &masses_other, cluster, sram);
-
-    total_mass += masses_other[i];
-    mass_weighted_v.x = fma(masses_other[i], velocities_other[i].x, mass_weighted_v.x);
-    mass_weighted_v.y = fma(masses_other[i], velocities_other[i].y, mass_weighted_v.y);
-    mass_weighted_v.z = fma(masses_other[i], velocities_other[i].z, mass_weighted_v.z);
+    total_mass += mapped_block->masses[i];
+    mass_weighted_v.x = fma(mapped_block->masses[i], mapped_block->velocities[i].x, mass_weighted_v.x);
+    mass_weighted_v.y = fma(mapped_block->masses[i], mapped_block->velocities[i].y, mass_weighted_v.y);
+    mass_weighted_v.z = fma(mapped_block->masses[i], mapped_block->velocities[i].z, mass_weighted_v.z);
   }
-
-  // prevent race condition, ensure all threads have finished reading old
-  // velocities
-  cluster.sync();
 
   // if we are performing the reverse conversion, we just need to divide by the main mass = 1
   double scaling_factor = 1.00 / fma(not_reverse_d, total_mass, 1.00);
@@ -604,33 +570,30 @@ __device__ void democratic_heliocentric_conversion(
   mass_weighted_v.z *= scaling_factor;
 
   // if we are performing the reverse conversion, we need to add not subtract
-  velocities[idx].x = fma(add_or_sub, mass_weighted_v.x, velocities[idx].x);
-  velocities[idx].y = fma(add_or_sub, mass_weighted_v.y, velocities[idx].y);
-  velocities[idx].z = fma(add_or_sub, mass_weighted_v.z, velocities[idx].z);
+  double3 res = make_double3(0.0, 0.0, 0.0);
+  res.x = fma(add_or_sub, mass_weighted_v.x, current_coords.vel.x);
+  res.y = fma(add_or_sub, mass_weighted_v.y, current_coords.vel.y);
+  res.z = fma(add_or_sub, mass_weighted_v.z, current_coords.vel.z);
+  return res;
 }
 
 __device__ bool close_encounter_p(
-    cg::cluster_group cluster,
-    char *sram,
     double3 *positions,
     double3 *velocities,
     double *masses,
     int num_massive_bodies,
-    double dt)
+    double dt,
+    MappedBlock *mapped_block)
 {
   // get indices of bodies i am undergoing close encounters with
   int idx = threadIdx.x;
   bool has_close_encounter = false;
   for (int i = 0; i < num_massive_bodies; i++)
   {
-    double3 *positions_other;
-    double3 *velocities_other;
-    double *masses_other;
-    get_mapped_pos(&positions_other, &velocities_other, &masses_other, cluster, sram);
     double3 r_ij;
-    r_ij.x = positions_other[i].x - positions[idx].x;
-    r_ij.y = positions_other[i].y - positions[idx].y;
-    r_ij.z = positions_other[i].z - positions[idx].z;
+    r_ij.x = mapped_block->positions[i].x - positions[idx].x;
+    r_ij.y = mapped_block->positions[i].y - positions[idx].y;
+    r_ij.z = mapped_block->positions[i].z - positions[idx].z;
     double r_ij_mag = norm3d(r_ij.x, r_ij.y, r_ij.z);
     double r_crit = 0.06;  // fetch_r_crit((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, i, dt);
     bool r_crit_reached = (r_ij_mag < r_crit) && (idx != i);
@@ -673,6 +636,9 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   double3 *velocities = (double3 *)(sram + velocities_offset);
   double *masses = (double *)(sram + masses_offset);
 
+  MappedBlock mapped_block;
+  get_mapped_block(&mapped_block.positions, &mapped_block.velocities, &mapped_block.masses, cluster, sram);
+
   cluster.sync();
   masses[idx] = vec_masses_hbm[global_idx];
   double argument_of_perihelion = vec_argument_of_perihelion_hbm[global_idx];
@@ -706,19 +672,19 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   velocities[idx] = pos_vel.vel;
   cluster.sync();
   // convert to democratic heliocentric coordinates
-  democratic_heliocentric_conversion(cluster, sram, positions, velocities, masses, num_massive_bodies);
+  velocities[idx] = democratic_heliocentric_conversion((PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, &mapped_block);
 
   for (int i = 0; i < BATCH_SIZE; i++)
   {
     // first "kicks"
     cluster.sync();
     double3 velocity_after_body_interaction =
-        body_interaction_kick(cluster, sram, (PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, half_dt);
+        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, half_dt, &mapped_block);
     cluster.sync();
     velocities[idx] = velocity_after_body_interaction;
     cluster.sync();
     double3 position_after_main_body_kick =
-        main_body_kinetic(cluster, sram, positions, num_massive_bodies, half_dt);
+        main_body_kinetic(positions, num_massive_bodies, half_dt, &mapped_block);
     cluster.sync();
     positions[idx] = position_after_main_body_kick;
     cluster.sync();
@@ -730,16 +696,16 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     // use bulirsch-stoer aka richardson extrapolation w/ mod midpoint
     PosVel numerical_soln_to_close_encounter = PosVel{.pos = make_double3(0.0, 0.0, 0.0), .vel = make_double3(0.0, 0.0, 0.0)};
     PosVel analyical_soln_to_kepler = PosVel{.pos = make_double3(0.0, 0.0, 0.0), .vel = make_double3(0.0, 0.0, 0.0)};
-    bool is_close_encounter = close_encounter_p(cluster, sram, positions, velocities, masses, num_massive_bodies, dt);
+    bool is_close_encounter = close_encounter_p(positions, velocities, masses, num_massive_bodies, dt, &mapped_block);
     cluster.sync();
 
     // directly updates positions and velocities by dt
     numerical_soln_to_close_encounter =
-        richardson_extrapolation(cluster, sram, (PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, dt);
+        richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, dt, &mapped_block);
 
     cluster.sync();
 
-    elements_from_cartesian(cluster, positions, velocities, &inclination, &longitude_of_ascending_node, &argument_of_perihelion, &mean_anomaly, &eccentricity, &semi_major_axis);
+    elements_from_cartesian(positions, velocities, &inclination, &longitude_of_ascending_node, &argument_of_perihelion, &mean_anomaly, &eccentricity, &semi_major_axis);
     // advance mean anomaly, this is essentially advancing to the next
     // timestep
     cluster.sync();
@@ -772,12 +738,12 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
 
     // final "kicks"
     position_after_main_body_kick =
-        main_body_kinetic(cluster, sram, positions, num_massive_bodies, half_dt);
+        main_body_kinetic(positions, num_massive_bodies, half_dt, &mapped_block);
     cluster.sync();
     positions[idx] = position_after_main_body_kick;
     cluster.sync();
     velocity_after_body_interaction =
-        body_interaction_kick(cluster, sram, (PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, half_dt);
+        body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, half_dt, &mapped_block);
     cluster.sync();
     velocities[idx] = velocity_after_body_interaction;
   }
@@ -786,10 +752,9 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
 
   cluster.sync();
   // convert back to heliocentric coordinates
-  democratic_heliocentric_conversion(cluster, sram, positions, velocities, masses, num_massive_bodies, true);
+  velocities[idx] = democratic_heliocentric_conversion((PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, &mapped_block, true);
   // convert back to elements
   elements_from_cartesian(
-      cluster,
       positions,
       velocities,
       &inclination,

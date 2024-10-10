@@ -23,7 +23,7 @@ __host__ int main(int argc, char **argv)
   bool print_positions = false;
   std::string output_file = "";
   std::string config_file;
-  int NUM_TIMESTEPS;
+  long NUM_TIMESTEPS;
   int device = 0;
   args_parse(argc,
              argv,
@@ -176,7 +176,7 @@ __host__ int main(int argc, char **argv)
   int num_massive_bodies = get_num_massive_bodies(&sim);
   // ie after BATCH_SIZE timesteps, we want to print the output
   // and run kernel with updated orbital elements this is to save memory
-  int NUM_ITERS = NUM_TIMESTEPS > BATCH_SIZE ? NUM_TIMESTEPS / BATCH_SIZE : NUM_TIMESTEPS;
+  long NUM_ITERS = NUM_TIMESTEPS > BATCH_SIZE ? NUM_TIMESTEPS / BATCH_SIZE : NUM_TIMESTEPS;
   if (NUM_TIMESTEPS > BATCH_SIZE) assert(NUM_TIMESTEPS % BATCH_SIZE == 0);
 
   for (int batch = 0; batch < NUM_ITERS; batch++)

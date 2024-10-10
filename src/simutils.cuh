@@ -41,7 +41,7 @@ struct Sweep
 struct Sim
 {
   int num_bodies;
-  int num_timesteps;
+  long num_timesteps;
   double3 *positions;
   double3 *velocities;
   double *masses;
@@ -53,6 +53,13 @@ struct Sim
   double *vec_semi_major_axis;
   std::string *body_names;
   Sweep *sweeps;
+};
+
+struct MappedBlock
+{
+  double3 *positions;
+  double3 *velocities;
+  double *masses;
 };
 
 struct PosVel
@@ -67,7 +74,7 @@ struct KR_Crit
   double K;
 };
 
-__host__ void initialize_std_sim(Sim *sim, int num_bodies, int num_timesteps)
+__host__ void initialize_std_sim(Sim *sim, int num_bodies, long num_timesteps)
 {
   sim->vec_inclination = (double *)malloc(num_bodies * sizeof(double));
   sim->vec_longitude_of_ascending_node =
@@ -120,7 +127,7 @@ __host__ void args_parse(int argc,
                          char **argv,
                          bool *print_sim_info,
                          bool *print_positions,
-                         int *num_timesteps,
+                         long *num_timesteps,
                          std::string *config_file,
                          std::string *output_file,
                          int *device)
@@ -133,7 +140,7 @@ __host__ void args_parse(int argc,
 
     if (!strcmp(argv[i], "-t"))
     {
-      *num_timesteps = atoi(argv[i + 1]);
+      *num_timesteps = atol(argv[i + 1]);
       continue;
     }
 
@@ -169,10 +176,12 @@ __host__ void write_positions(Sim *sim, double3 *output_positions, std::string f
     return;
   }
 
-  file << "# Timestep " << offset + 1 << std::endl;
+  // timestamp token
+  file << "#\n";
   for (int i = 0; i < SWEEPS_PER_GPU; i++)
   {
-    file << "Experiment " << (i + 1) << std::endl;
+    // experiment token
+    file << "$\n";
     for (int j = 0; j < sim->num_bodies; j++)
     {
       double x = output_positions[i * sim->num_bodies + j].x;
@@ -184,10 +193,10 @@ __host__ void write_positions(Sim *sim, double3 *output_positions, std::string f
         std::cerr << "NaN detected in output_positions. On timestep " << offset + 1 << std::endl;
       }
 
-      file << sim->body_names[j] << ": "
-           << x << " "
-           << y << " "
-           << z << std::endl;
+      file
+          << x << " "
+          << y << " "
+          << z << std::endl;
     }
     file << std::endl;
   }
@@ -199,7 +208,7 @@ __host__ void write_positions(Sim *sim, double3 *output_positions, std::string f
 
 __host__ void sim_from_config_file(Sim *sim,
                                    std::string config_file,
-                                   int num_timesteps,
+                                   long num_timesteps,
                                    int device)
 {
   /*
