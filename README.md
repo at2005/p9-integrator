@@ -1,5 +1,4 @@
-# A CUDA implementation of the Mercury N-body Integrator for use on GPU Supercomputing Clusters
-
+# A Highly Parallel CUDA implementation of the Mercury N-body Integrator
 Note: Units are such that G=1, ie mass is in solar masses, distance is in AU, time is in years, etc.
 
 ## Compiling
