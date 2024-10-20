@@ -134,6 +134,7 @@ __host__ int main(int argc, char **argv)
   CUDA_ALLOCATE_SWEEP(eccentricities);
   CUDA_ALLOCATE_SWEEP(semi_major_axes);
   CUDA_ALLOCATE_SWEEP(masses);
+  CUDA_ALLOCATE_SWEEP(mean_anomalies);
 
   cudaMemcpy(sweep_device, &sweep_host, sizeof(Sweep), cudaMemcpyHostToDevice);
 
@@ -160,6 +161,10 @@ __host__ int main(int argc, char **argv)
              cudaMemcpyHostToDevice);
   cudaMemcpy(sweep_host.masses,
              sim.sweeps->masses,
+             SWEEPS_PER_GPU * sizeof(double),
+             cudaMemcpyHostToDevice);
+  cudaMemcpy(sweep_host.mean_anomalies,
+             sim.sweeps->mean_anomalies,
              SWEEPS_PER_GPU * sizeof(double),
              cudaMemcpyHostToDevice);
 
@@ -203,6 +208,76 @@ __host__ int main(int argc, char **argv)
                sim.num_bodies * sizeof(double3) * SWEEPS_PER_GPU,
                cudaMemcpyDeviceToHost);
 
+    if (batch % CHECKPOINT_FREQUENCY == 0)
+    {
+      // memcpy orbital elements to host
+      cudaMemcpy(sim.vec_eccentricity,
+                 vec_longitude_of_ascending_node_device,
+                 sim.num_bodies * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+
+      cudaMemcpy(sim.vec_inclination,
+                 vec_inclination_device,
+                 sim.num_bodies * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+
+      cudaMemcpy(sim.vec_argument_of_perihelion,
+                 vec_argument_of_perihelion_device,
+                 sim.num_bodies * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+
+      cudaMemcpy(sim.vec_mean_anomaly,
+                 vec_mean_anomaly_device,
+                 sim.num_bodies * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+
+      cudaMemcpy(sim.vec_eccentricity,
+                 vec_eccentricity_device,
+                 sim.num_bodies * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+
+      cudaMemcpy(sim.vec_semi_major_axis,
+                 vec_semi_major_axis_device,
+                 sim.num_bodies * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+
+      // copy sweep data
+      cudaMemcpy(sim.sweeps->longitude_of_ascending_nodes,
+                 sweep_host.longitude_of_ascending_nodes,
+                 SWEEPS_PER_GPU * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+      cudaMemcpy(sim.sweeps->inclinations,
+                 sweep_host.inclinations,
+                 SWEEPS_PER_GPU * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+      cudaMemcpy(sim.sweeps->argument_of_perihelion,
+                 sweep_host.argument_of_perihelion,
+                 SWEEPS_PER_GPU * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+      cudaMemcpy(sim.sweeps->eccentricities,
+                 sweep_host.eccentricities,
+                 SWEEPS_PER_GPU * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+      cudaMemcpy(sim.sweeps->semi_major_axes,
+                 sweep_host.semi_major_axes,
+                 SWEEPS_PER_GPU * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+      cudaMemcpy(sim.sweeps->mean_anomalies,
+                 sweep_host.mean_anomalies,
+                 SWEEPS_PER_GPU * sizeof(double),
+                 cudaMemcpyDeviceToHost);
+
+      // write checkpoint
+      Elements el = {.inclination = sim.vec_inclination,
+                     .longitude_of_ascending_node = sim.vec_longitude_of_ascending_node,
+                     .argument_of_perihelion = sim.vec_argument_of_perihelion,
+                     .mean_anomaly = sim.vec_mean_anomaly,
+                     .eccentricity = sim.vec_eccentricity,
+                     .semi_major_axis = sim.vec_semi_major_axis};
+
+      dump_elements(&el, sim.sweeps, batch, sim.num_bodies, device);
+    }
+
     if (print_positions) write_positions(&sim, output_positions, output_file, batch, device);
   }
 
@@ -220,6 +295,7 @@ __host__ int main(int argc, char **argv)
   cudaFree(sweep_host.eccentricities);
   cudaFree(sweep_host.semi_major_axes);
   cudaFree(sweep_host.masses);
+  cudaFree(sweep_host.mean_anomalies);
   cudaFree(sweep_device);
   cudaDeviceReset();
 }

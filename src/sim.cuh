@@ -656,6 +656,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     eccentricity = sweep_hbm->eccentricities[cluster_idx];
     semi_major_axis = sweep_hbm->semi_major_axes[cluster_idx];
     masses[idx] = sweep_hbm->masses[cluster_idx];
+    mean_anomaly = sweep_hbm->mean_anomalies[cluster_idx];
   }
 
   double half_dt = 0.5 * dt;
@@ -780,6 +781,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     sweep_hbm->argument_of_perihelion[cluster_idx] = argument_of_perihelion;
     sweep_hbm->eccentricities[cluster_idx] = eccentricity;
     sweep_hbm->semi_major_axes[cluster_idx] = semi_major_axis;
+    sweep_hbm->mean_anomalies[cluster_idx] = mean_anomaly;
   }
 }
 

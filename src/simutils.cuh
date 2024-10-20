@@ -36,6 +36,18 @@ struct Sweep
   double *argument_of_perihelion;
   double *eccentricities;
   double *semi_major_axes;
+  // this is only used for storing the mean anomaly of the orbit
+  double *mean_anomalies;
+};
+
+struct Elements
+{
+  double *inclination;
+  double *longitude_of_ascending_node;
+  double *argument_of_perihelion;
+  double *mean_anomaly;
+  double *eccentricity;
+  double *semi_major_axis;
 };
 
 struct Sim
@@ -260,6 +272,7 @@ __host__ void sim_from_config_file(Sim *sim,
   ALLOCATE_SWEEP_HOST_MEMORY(argument_of_perihelion);
   ALLOCATE_SWEEP_HOST_MEMORY(eccentricities);
   ALLOCATE_SWEEP_HOST_MEMORY(semi_major_axes);
+  ALLOCATE_SWEEP_HOST_MEMORY(mean_anomalies);
 
   for (int idx = 0; idx < SWEEPS_PER_GPU; idx++)
   {
@@ -272,7 +285,33 @@ __host__ void sim_from_config_file(Sim *sim,
     sim->sweeps->argument_of_perihelion[idx] = sweep["argument_of_perihelion"];
     sim->sweeps->eccentricities[idx] = sweep["eccentricity"];
     sim->sweeps->semi_major_axes[idx] = sweep["semi_major_axis"];
+    sim->sweeps->mean_anomalies[idx] = 0.00;
   }
+}
+
+__host__ void dump_elements(Elements *elements, Sweep *sweep, int batch, int num_bodies, int device)
+{
+  long timestep = batch * BATCH_SIZE;
+  std::string filename = "elements_" + std::to_string(timestep) + "_" + std::to_string(device) + ".txt";
+  std::ofstream file(filename, std::ios::app);
+  if (!file)
+  {
+    std::cerr << "Error opening file: " << filename << std::endl;
+    return;
+  }
+
+  for (int i = 1; i < num_bodies; i++)
+  {
+    file << elements->inclination[i] << " " << elements->longitude_of_ascending_node[i] << " " << elements->argument_of_perihelion[i] << " " << elements->mean_anomaly[i] << " " << elements->eccentricity[i] << " " << elements->semi_major_axis[i] << std::endl;
+  }
+
+  std::cout << "Dumping sweep data" << std::endl;
+  for (int i = 0; i < SWEEPS_PER_GPU; i++)
+  {
+    file << sweep->longitude_of_ascending_nodes[i] << " " << sweep->inclinations[i] << " " << sweep->argument_of_perihelion[i] << " " << sweep->eccentricities[i] << " " << sweep->semi_major_axes[i] << " " << sweep->mean_anomalies[i] << std::endl;
+  }
+
+  file.close();
 }
 
 #endif

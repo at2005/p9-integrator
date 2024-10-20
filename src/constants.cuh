@@ -10,6 +10,7 @@
 #define MAX_ROWS_RICHARDSON 3
 #define BATCH_SIZE 1000000
 #define SWEEPS_PER_GPU 4
+#define CHECKPOINT_FREQUENCY 20
 // we have a 8 GPU node for now
 #define NUM_GPUS 8
 #endif
