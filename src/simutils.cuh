@@ -188,6 +188,7 @@ __host__ void write_positions(Sim *sim, double3 *output_positions, std::string f
     return;
   }
 
+  int nan_counter = 0;
   // timestamp token
   file << "#\n";
   for (int i = 0; i < SWEEPS_PER_GPU; i++)
@@ -202,7 +203,7 @@ __host__ void write_positions(Sim *sim, double3 *output_positions, std::string f
 
       if (isnan(x) || isnan(y) || isnan(z))
       {
-        std::cerr << "NaN detected in output_positions. On timestep " << offset + 1 << std::endl;
+        nan_counter++;
       }
 
       file
@@ -214,8 +215,9 @@ __host__ void write_positions(Sim *sim, double3 *output_positions, std::string f
   }
 
   file << std::endl;
-
   file.close();
+
+  std::cout << "NaN counter for  " << offset + 1 << " timestep (mYrs): " << nan_counter << std::endl;
 }
 
 __host__ void sim_from_config_file(Sim *sim,
@@ -287,31 +289,6 @@ __host__ void sim_from_config_file(Sim *sim,
     sim->sweeps->semi_major_axes[idx] = sweep["semi_major_axis"];
     sim->sweeps->mean_anomalies[idx] = 0.00;
   }
-}
-
-__host__ void dump_elements(Elements *elements, Sweep *sweep, int batch, int num_bodies, int device)
-{
-  long timestep = batch * BATCH_SIZE;
-  std::string filename = "elements_" + std::to_string(timestep) + "_" + std::to_string(device) + ".txt";
-  std::ofstream file(filename, std::ios::app);
-  if (!file)
-  {
-    std::cerr << "Error opening file: " << filename << std::endl;
-    return;
-  }
-
-  for (int i = 1; i < num_bodies; i++)
-  {
-    file << elements->inclination[i] << " " << elements->longitude_of_ascending_node[i] << " " << elements->argument_of_perihelion[i] << " " << elements->mean_anomaly[i] << " " << elements->eccentricity[i] << " " << elements->semi_major_axis[i] << std::endl;
-  }
-
-  std::cout << "Dumping sweep data" << std::endl;
-  for (int i = 0; i < SWEEPS_PER_GPU; i++)
-  {
-    file << sweep->longitude_of_ascending_nodes[i] << " " << sweep->inclinations[i] << " " << sweep->argument_of_perihelion[i] << " " << sweep->eccentricities[i] << " " << sweep->semi_major_axes[i] << " " << sweep->mean_anomalies[i] << std::endl;
-  }
-
-  file.close();
 }
 
 #endif

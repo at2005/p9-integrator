@@ -610,7 +610,6 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
                                  double *vec_inclination_hbm,
                                  double *vec_longitude_of_ascending_node_hbm,
                                  double *vec_masses_hbm,
-                                 Sweep *sweep_hbm,
                                  double3 *output_positions_hbm,
                                  int num_massive_bodies,
                                  int batch_idx,
@@ -623,7 +622,7 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   cg::cluster_group cluster = cg::this_cluster();
   unsigned int clusterBlockRank = cluster.block_rank();
   int num_threads = cluster.num_threads();
-  int global_idx = cluster.thread_rank();
+  int body_idx = cluster.thread_rank();
   int idx = threadIdx.x;
   cg::grid_group g = cg::this_grid();
   int cluster_idx = g.cluster_rank();
@@ -640,24 +639,17 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
   get_mapped_block(&mapped_block.positions, &mapped_block.velocities, &mapped_block.masses, cluster, sram);
 
   cluster.sync();
-  masses[idx] = vec_masses_hbm[global_idx];
-  double argument_of_perihelion = vec_argument_of_perihelion_hbm[global_idx];
-  double mean_anomaly = vec_mean_anomaly_hbm[global_idx];
-  double eccentricity = vec_eccentricity_hbm[global_idx];
-  double semi_major_axis = vec_semi_major_axis_hbm[global_idx];
-  double inclination = vec_inclination_hbm[global_idx];
-  double longitude_of_ascending_node = vec_longitude_of_ascending_node_hbm[global_idx];
+  // so each cluster has num_threads, and so we are reading the corresponding experiment block from hbm
+  int hbm_idx = num_threads * cluster_idx + body_idx;
+  // there are only as many masses as there are bodies
+  masses[idx] = vec_masses_hbm[body_idx];
 
-  if (global_idx == 0 && sweep_hbm != NULL)
-  {
-    longitude_of_ascending_node = sweep_hbm->longitude_of_ascending_nodes[cluster_idx];
-    inclination = sweep_hbm->inclinations[cluster_idx];
-    argument_of_perihelion = sweep_hbm->argument_of_perihelion[cluster_idx];
-    eccentricity = sweep_hbm->eccentricities[cluster_idx];
-    semi_major_axis = sweep_hbm->semi_major_axes[cluster_idx];
-    masses[idx] = sweep_hbm->masses[cluster_idx];
-    mean_anomaly = sweep_hbm->mean_anomalies[cluster_idx];
-  }
+  double argument_of_perihelion = vec_argument_of_perihelion_hbm[hbm_idx];
+  double mean_anomaly = vec_mean_anomaly_hbm[hbm_idx];
+  double eccentricity = vec_eccentricity_hbm[hbm_idx];
+  double semi_major_axis = vec_semi_major_axis_hbm[hbm_idx];
+  double inclination = vec_inclination_hbm[hbm_idx];
+  double longitude_of_ascending_node = vec_longitude_of_ascending_node_hbm[hbm_idx];
 
   double half_dt = 0.5 * dt;
   // initially populate positions and velocities
@@ -681,12 +673,10 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     cluster.sync();
     double3 velocity_after_body_interaction =
         body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, half_dt, &mapped_block);
-    cluster.sync();
     velocities[idx] = velocity_after_body_interaction;
     cluster.sync();
     double3 position_after_main_body_kick =
         main_body_kinetic(positions, num_massive_bodies, half_dt, &mapped_block);
-    cluster.sync();
     positions[idx] = position_after_main_body_kick;
     cluster.sync();
 
@@ -698,20 +688,14 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     PosVel numerical_soln_to_close_encounter = PosVel{.pos = make_double3(0.0, 0.0, 0.0), .vel = make_double3(0.0, 0.0, 0.0)};
     PosVel analyical_soln_to_kepler = PosVel{.pos = make_double3(0.0, 0.0, 0.0), .vel = make_double3(0.0, 0.0, 0.0)};
     bool is_close_encounter = close_encounter_p(positions, velocities, masses, num_massive_bodies, dt, &mapped_block);
-    cluster.sync();
-
     // directly updates positions and velocities by dt
     numerical_soln_to_close_encounter =
         richardson_extrapolation((PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, dt, &mapped_block);
 
-    cluster.sync();
-
     elements_from_cartesian(positions, velocities, &inclination, &longitude_of_ascending_node, &argument_of_perihelion, &mean_anomaly, &eccentricity, &semi_major_axis);
     // advance mean anomaly, this is essentially advancing to the next
     // timestep
-    cluster.sync();
     mean_anomaly = (double)(!is_close_encounter) * fmod(fma(n, dt, mean_anomaly), TWOPI) + (double)(is_close_encounter)*mean_anomaly;
-    cluster.sync();
     analyical_soln_to_kepler = cartesian_from_elements(inclination,
                                                        longitude_of_ascending_node,
                                                        argument_of_perihelion,
@@ -738,23 +722,22 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
     cluster.sync();
 
     // final "kicks"
+    // we only read in our position and velocity, so we don't need to sync
     position_after_main_body_kick =
         main_body_kinetic(positions, num_massive_bodies, half_dt, &mapped_block);
-    cluster.sync();
     positions[idx] = position_after_main_body_kick;
     cluster.sync();
     velocity_after_body_interaction =
         body_interaction_kick((PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, half_dt, &mapped_block);
-    cluster.sync();
     velocities[idx] = velocity_after_body_interaction;
   }
 
-  output_positions_hbm[global_idx + cluster_idx * cluster.size()] = positions[idx];
+  output_positions_hbm[hbm_idx] = positions[idx];
 
   cluster.sync();
   // convert back to heliocentric coordinates
   velocities[idx] = democratic_heliocentric_conversion((PosVel){.pos = positions[idx], .vel = velocities[idx]}, num_massive_bodies, &mapped_block, true);
-  // convert back to elements
+  //  convert back to elements
   elements_from_cartesian(
       positions,
       velocities,
@@ -764,25 +747,14 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
       &mean_anomaly,
       &eccentricity,
       &semi_major_axis);
-  cluster.sync();
   // copy elements to hbm, this is so that the next batch iteration uses these values to pick up where we left off
 
-  vec_semi_major_axis_hbm[global_idx] = semi_major_axis;
-  vec_eccentricity_hbm[global_idx] = eccentricity;
-  vec_mean_anomaly_hbm[global_idx] = mean_anomaly;
-  vec_argument_of_perihelion_hbm[global_idx] = argument_of_perihelion;
-  vec_inclination_hbm[global_idx] = inclination;
-  vec_longitude_of_ascending_node_hbm[global_idx] = longitude_of_ascending_node;
-
-  if (global_idx == 0 && sweep_hbm != NULL)
-  {
-    sweep_hbm->longitude_of_ascending_nodes[cluster_idx] = longitude_of_ascending_node;
-    sweep_hbm->inclinations[cluster_idx] = inclination;
-    sweep_hbm->argument_of_perihelion[cluster_idx] = argument_of_perihelion;
-    sweep_hbm->eccentricities[cluster_idx] = eccentricity;
-    sweep_hbm->semi_major_axes[cluster_idx] = semi_major_axis;
-    sweep_hbm->mean_anomalies[cluster_idx] = mean_anomaly;
-  }
+  vec_semi_major_axis_hbm[hbm_idx] = semi_major_axis;
+  vec_eccentricity_hbm[hbm_idx] = eccentricity;
+  vec_mean_anomaly_hbm[hbm_idx] = mean_anomaly;
+  vec_argument_of_perihelion_hbm[hbm_idx] = argument_of_perihelion;
+  vec_inclination_hbm[hbm_idx] = inclination;
+  vec_longitude_of_ascending_node_hbm[hbm_idx] = longitude_of_ascending_node;
 }
 
 #endif
