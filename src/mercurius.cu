@@ -197,12 +197,58 @@ __host__ int main(int argc, char **argv)
 
     cudaDeviceSynchronize();
     if (print_sim_info) std::cout << "Batch " << (batch + 1) << " Simulation Complete.\n";
-    cudaMemcpy(output_positions,
-               output_positions_device,
-               sim.num_bodies * sizeof(double3) * SWEEPS_PER_GPU,
-               cudaMemcpyDeviceToHost);
 
-    if (print_positions) write_positions(&sim, output_positions, output_file, batch, device);
+    if (batch % CHECKPOINT_FREQUENCY == 0)
+    {
+      cudaMemcpy(output_positions,
+                 output_positions_device,
+                 sim.num_bodies * sizeof(double3) * SWEEPS_PER_GPU,
+                 cudaMemcpyDeviceToHost);
+
+      write_positions(&sim, output_positions, output_file, batch, device);
+
+      std::ofstream file("elements_" + std::to_string(device) + ".txt");
+      file << "Timestep: " << batch * BATCH_SIZE << std::endl;
+      for (int i = 0; i < SWEEPS_PER_GPU; i++)
+      {
+        file << "Experiment: " << i << std::endl;
+        cudaMemcpy(sim.vec_eccentricity,
+                   vec_eccentricity_device + i * sim.num_bodies,
+                   sim.num_bodies * sizeof(double),
+                   cudaMemcpyDeviceToHost);
+
+        cudaMemcpy(sim.vec_inclination,
+                   vec_inclination_device + i * sim.num_bodies,
+                   sim.num_bodies * sizeof(double),
+                   cudaMemcpyDeviceToHost);
+
+        cudaMemcpy(sim.vec_argument_of_perihelion,
+                   vec_argument_of_perihelion_device + i * sim.num_bodies,
+                   sim.num_bodies * sizeof(double),
+                   cudaMemcpyDeviceToHost);
+
+        cudaMemcpy(sim.vec_mean_anomaly,
+                   vec_mean_anomaly_device + i * sim.num_bodies,
+                   sim.num_bodies * sizeof(double),
+                   cudaMemcpyDeviceToHost);
+
+        cudaMemcpy(sim.vec_longitude_of_ascending_node,
+                   vec_longitude_of_ascending_node_device + i * sim.num_bodies,
+                   sim.num_bodies * sizeof(double),
+                   cudaMemcpyDeviceToHost);
+
+        cudaMemcpy(sim.vec_semi_major_axis,
+                   vec_semi_major_axis_device + i * sim.num_bodies,
+                   sim.num_bodies * sizeof(double),
+                   cudaMemcpyDeviceToHost);
+
+        write_elements(&sim, file);
+      }
+
+      file.close();
+    }
+
+    // if (print_positions) write_positions(&sim, output_positions, output_file, batch, device);
   }
 
   cudaFree(vec_longitude_of_ascending_node_device);
