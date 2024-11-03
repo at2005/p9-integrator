@@ -748,7 +748,6 @@ __global__ void mercurius_solver(double *vec_argument_of_perihelion_hbm,
       &eccentricity,
       &semi_major_axis);
   // copy elements to hbm, this is so that the next batch iteration uses these values to pick up where we left off
-
   vec_semi_major_axis_hbm[hbm_idx] = semi_major_axis;
   vec_eccentricity_hbm[hbm_idx] = eccentricity;
   vec_mean_anomaly_hbm[hbm_idx] = mean_anomaly;

@@ -176,16 +176,11 @@ __host__ void args_parse(int argc,
 
 __host__ void write_elements(Sim *sim, std::ofstream &file)
 {
-  for (int i = 0; i < SWEEPS_PER_GPU; i++)
+  for (int k = 0; k < sim->num_bodies; k++)
   {
-    int offset_elements = i * sim->num_bodies;
-    for (int j = 0; j < sim->num_bodies; j++)
-    {
-      int k = offset_elements + j;
-      file << sim->vec_inclination[k] << " " << sim->vec_longitude_of_ascending_node[k] << " " << sim->vec_argument_of_perihelion[k] << " " << sim->vec_mean_anomaly[k] << " " << sim->vec_eccentricity[k] << " " << sim->vec_semi_major_axis[k] << std::endl;
-    }
-    file << std::endl;
+    file << sim->vec_inclination[k] << " " << sim->vec_longitude_of_ascending_node[k] << " " << sim->vec_argument_of_perihelion[k] << " " << sim->vec_mean_anomaly[k] << " " << sim->vec_eccentricity[k] << " " << sim->vec_semi_major_axis[k] << std::endl;
   }
+  file << std::endl;
 }
 
 __host__ void write_positions(Sim *sim, double3 *output_positions, std::string file_name, int batch_index, int device)
