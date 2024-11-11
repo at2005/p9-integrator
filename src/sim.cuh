@@ -138,23 +138,23 @@ __device__ double fetch_r_crit(
   double3 v = mapped_block->velocities[idx_large_body];
 
   double3 h;
-  h.x = r.y * v.z - r.z * v.y;
-  h.y = r.z * v.x - r.x * v.z;
-  h.z = r.x * v.y - r.y * v.x;
+  h.x = fma(r.y, v.z, -r.z * v.y);
+  h.y = fma(r.z, v.x, -r.x * v.z);
+  h.z = fma(r.x, v.y, -r.y * v.x);
 
-  double h_mag2 = h.x * h.x + h.y * h.y + h.z * h.z;
+  double h_mag2 = magnitude_squared(h);
 
   double r_mag = magnitude(r);
-  double v_mag2 = magnitude2(v);
-  double r_dot_v = dot(r, v);
+  double v_mag2 = magnitude_squared(v);
+  double r_dot_v = fma(r.x, v.x, fma(r.y, v.y, r.z * v.z));
 
   double3 e;
   double factor = v_mag2 - 1.0 / r_mag;
-  e.x = (factor * r.x - r_dot_v * v.x);
-  e.y = (factor * r.y - r_dot_v * v.y);
-  e.z = (factor * r.z - r_dot_v * v.z);
+  e.x = fma(factor, r.x, -r_dot_v * v.x);
+  e.y = fma(factor, r.y, -r_dot_v * v.y);
+  e.z = fma(factor, r.z, -r_dot_v * v.z);
 
-  double e_mag2 = e.x * e.x + e.y * e.y + e.z * e.z;
+  double e_mag2 = magnitude_squared(e);
 
   // Calculate semi-major axis: a = h*h/mu(1-e*e)
   double semi_major_axis = h_mag2 / (1.0 - e_mag2);
