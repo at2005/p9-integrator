@@ -131,27 +131,36 @@ __device__ double dist(double3 a, double3 b)
 }
 
 __device__ double fetch_r_crit(
-    PosVel current_coords,
-    // read only
-    const double3 *positions,
-    const double3 *velocities,
-    const double *masses,
-    int idx_other,
-    double dt)
+    MappedBlock *mapped_block,
+    int idx_large_body)
 {
-  // // anywhere between 3-10
-  // double n1 = 3.50;
-  // // anywhere between 0.3-2.0
-  // double n2 = 2;
-  // double r1 = magnitude(current_coords.pos);
-  // double r2 = magnitude(positions[idx_other]);
-  // double v1 = magnitude(current_coords.vel);
-  // double v2 = magnitude(velocities[idx_other]);
-  // double mutual_hill_radius =
-  //     cbrt(masses[threadIdx.x + blockIdx.x * blockDim.x] + masses[idx_other] / 3.00) * (r1 + r2) / 2.00;
-  // double vmax = max(v1, v2);
-  // return max(n1 * mutual_hill_radius, n2 * vmax * dt);
-  return 0.06;
+  double3 r = mapped_block->positions[idx_large_body];
+  double3 v = mapped_block->velocities[idx_large_body];
+
+  double3 h;
+  h.x = r.y * v.z - r.z * v.y;
+  h.y = r.z * v.x - r.x * v.z;
+  h.z = r.x * v.y - r.y * v.x;
+
+  double h_mag2 = h.x * h.x + h.y * h.y + h.z * h.z;
+
+  double r_mag = magnitude(r);
+  double v_mag2 = magnitude2(v);
+  double r_dot_v = dot(r, v);
+
+  double3 e;
+  double factor = v_mag2 - 1.0 / r_mag;
+  e.x = (factor * r.x - r_dot_v * v.x);
+  e.y = (factor * r.y - r_dot_v * v.y);
+  e.z = (factor * r.z - r_dot_v * v.z);
+
+  double e_mag2 = e.x * e.x + e.y * e.y + e.z * e.z;
+
+  // Calculate semi-major axis: a = h*h/mu(1-e*e)
+  double semi_major_axis = h_mag2 / (1.0 - e_mag2);
+
+  // Calculate Hill radius
+  return semi_major_axis * cbrt(mapped_block->masses[idx_large_body] / 3.0);
 }
 
 __device__ KR_Crit changeover(
@@ -161,9 +170,7 @@ __device__ KR_Crit changeover(
     MappedBlock *mapped_block)
 {
   int idx = threadIdx.x;
-  double r_crit = 0.06;  // fetch_r_crit(current_coords, positions, velocities, masses, idx_other, dt);
-  KR_Crit res;
-  res.r_crit = r_crit;
+  double r_crit = fetch_r_crit(current_coords, masses, idx_other, dt);
   // we can assume that massive bodies are in cluster 0
   double r_ij = (double)(idx != idx_other) * dist(mapped_block->positions[idx_other], current_coords.pos);
   double y = (r_ij - 0.1 * r_crit) / (0.9 * r_crit);
@@ -172,7 +179,9 @@ __device__ KR_Crit changeover(
   double gtz = (double)(y > 0);
   double gto = (double)(y > 1);
   double valid = (double)(y <= 1 && y >= 0);
+  KR_Crit res;
   res.K = K * gtz * valid + gto;
+  res.r_crit = r_crit;
   return res;
 }
 
@@ -595,7 +604,7 @@ __device__ bool close_encounter_p(
     r_ij.y = mapped_block->positions[i].y - positions[idx].y;
     r_ij.z = mapped_block->positions[i].z - positions[idx].z;
     double r_ij_mag = norm3d(r_ij.x, r_ij.y, r_ij.z);
-    double r_crit = 0.06;  // fetch_r_crit((PosVel){.pos = positions[idx], .vel = velocities[idx]}, positions, velocities, masses, i, dt);
+    double r_crit = fetch_r_crit(mapped_block, i);
     bool r_crit_reached = (r_ij_mag < r_crit) && (idx != i);
     has_close_encounter = has_close_encounter || r_crit_reached;
   }

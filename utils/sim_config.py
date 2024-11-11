@@ -114,6 +114,21 @@ def p9_setup_config():
             "mean_anomaly": 0
         })
 
+    sweep_json = []
+    p9_sweep_dict = combinatorial_sweep(5000,  [p9_a, p9_i, p9_e, p9_longitude_of_perihelion, p9_longitude_ascending_node])
+    for i in range(len(p9_sweep_dict)):
+        sweep_json.append({
+            "semi_major_axis": p9_sweep_dict[i][0],
+            "inclination": p9_sweep_dict[i][1],
+            "eccentricity": p9_sweep_dict[i][2],
+            "argument_of_periapsis": p9_sweep_dict[i][3],
+            "ascending_node": p9_sweep_dict[i][4],
+        })
+
+    with open("../../possible_orbits.json", "w") as f:
+        json.dump(sweep_json, f, indent=0)
+
+
     # adding Planet Nine under hypothetical elements
     config_dict["bodies"].append({
         "name": "Planet Nine",
